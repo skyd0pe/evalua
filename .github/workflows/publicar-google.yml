@@ -148,9 +148,14 @@ jobs:
         run: |
           sleep 5
           URL="https://script.google.com/macros/s/$DEPLOYMENT_ID/exec"
-          RESP=$(curl -sSL -X POST -H 'Content-Type: text/plain;charset=utf-8' --data '{"a":"cursos"}' "$URL")
+          # Sin -X POST: Google redirige y la segunda pedida tiene que ser GET (como hace el navegador).
+          for i in 1 2 3; do
+            RESP=$(curl -sSL -H 'Content-Type: text/plain;charset=utf-8' --data '{"a":"cursos"}' "$URL" || true)
+            echo "$RESP" | grep -q '"ok":true' && { echo "Responde bien."; exit 0; }
+            sleep 10
+          done
           echo "$RESP" | head -c 300; echo
-          echo "$RESP" | grep -q '"ok":true' || { echo "::error::La app publicada no respondió bien."; exit 1; }
+          echo "::error::La app publicada no respondió bien."; exit 1
 
       - name: Borrar la credencial del equipo de GitHub
         if: always()
