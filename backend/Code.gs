@@ -8,9 +8,10 @@
    3. Implementar > Nueva implementación > Aplicación web. Ejecutar como: yo. Acceso: cualquier persona.
    4. Copiar la dirección que termina en /exec y pegarla en API_URL, al principio de index.html. */
 
-function hojasDb_() {
-  var ss = SpreadsheetApp.getActive(), memo = {};
+function hojasDb_(cache) {
+  var ss = SpreadsheetApp.getActive(), memo = {}, hojas = {};
   function hoja(t) {
+    if (hojas[t]) return hojas[t];
     var h = ss.getSheetByName(t);
     if (!h) {
       h = ss.insertSheet(t);
@@ -18,39 +19,69 @@ function hojasDb_() {
       h.getRange(1, 1, 1, TABLAS[t].length).setValues([TABLAS[t]]).setFontWeight('bold');
       h.setFrozenRows(1);
     }
-    return h;
+    var cab = h.getRange(1, 1, 1, TABLAS[t].length).getDisplayValues()[0];      // agrega columnas nuevas si la tabla creció
+    if (cab.join('|') !== TABLAS[t].join('|')) {
+      h.getRange(1, 1, h.getMaxRows(), TABLAS[t].length).setNumberFormat('@');
+      h.getRange(1, 1, 1, TABLAS[t].length).setValues([TABLAS[t]]).setFontWeight('bold');
+    }
+    return (hojas[t] = h);
   }
   function fila(t, o) { return TABLAS[t].map(function (k) { var v = o[k]; return v === undefined || v === null ? '' : String(v); }); }
+  /* Dónde está cada renglón. Los renglones nunca se mueven (borrar solo los vacía), así que el número guardado sigue valiendo;
+     igual se verifica que la primera celda tenga el id antes de escribir. */
+  function renglon(t, id) {
+    var h = hoja(t), k = 'fila:' + t + ':' + id, n = Number(cache.get(k));
+    if (n > 1 && n <= h.getLastRow() && h.getRange(n, 1).getDisplayValue() === id) return n;
+    var ids = h.getLastRow() > 1 ? h.getRange(2, 1, h.getLastRow() - 1, 1).getDisplayValues() : [];
+    for (var i = 0; i < ids.length; i++) if (ids[i][0] === id) { cache.put(k, String(i + 2), 21600); return i + 2; }
+    return 0;
+  }
   var db = {
     all: function (t) {
       if (memo[t]) return memo[t];
-      var v = hoja(t).getDataRange().getDisplayValues(), cols = TABLAS[t];
-      memo[t] = v.slice(1).map(function (r, i) {
-        var o = { _fila: i + 2 };
+      var h = hoja(t), n = h.getLastRow(), cols = TABLAS[t];
+      var v = n > 1 ? h.getRange(2, 1, n - 1, cols.length).getDisplayValues() : [];
+      memo[t] = v.map(function (r, i) {
+        var o = {};
         cols.forEach(function (k, j) { o[k] = r[j]; });
         return o;
       }).filter(function (o) { return o.id !== ''; });
       return memo[t];
     },
-    insert: function (t, o) {
-      var h = hoja(t), max = h.getMaxRows();
-      if (h.getLastRow() > max - 20) {                                            // antes de quedarse sin renglones, agrega más ya con formato de texto
-        h.insertRowsAfter(max, 500);
-        h.getRange(max + 1, 1, 500, TABLAS[t].length).setNumberFormat('@');
-      }
-      h.appendRow(fila(t, o));                                                    // appendRow es atómico: dos alumnos a la vez no se pisan
+    insert: function (t, o) { db.insertMany(t, [o]); },
+    /* Agregar renglones es lo único que necesita turno: dos alumnos agregando a la vez se pisarían. */
+    insertMany: function (t, os) {
+      if (!os.length) return;
+      var h = hoja(t), filas = os.map(function (o) { return fila(t, o); }), l = LockService.getScriptLock();
+      l.waitLock(30000);
+      try {
+        var desde = h.getLastRow() + 1, max = h.getMaxRows();
+        if (desde + filas.length > max - 20) {                                     // antes de quedarse sin renglones, agrega más ya con formato de texto
+          h.insertRowsAfter(max, 500 + filas.length);
+          h.getRange(max + 1, 1, 500 + filas.length, TABLAS[t].length).setNumberFormat('@');
+        }
+        h.getRange(desde, 1, filas.length, TABLAS[t].length).setValues(filas);
+        SpreadsheetApp.flush();
+        os.forEach(function (o, i) { cache.put('fila:' + t + ':' + o.id, String(desde + i), 21600); });
+      } finally { l.releaseLock(); }
       delete memo[t];
     },
+    /* Cambia solo las celdas pedidas, sin tocar el resto del renglón. */
     update: function (t, id, p) {
-      var o = db.all(t).filter(function (r) { return r.id === id; })[0];
-      if (!o) return;
-      Object.keys(p).forEach(function (k) { o[k] = String(p[k]); });
-      hoja(t).getRange(o._fila, 1, 1, TABLAS[t].length).setValues([fila(t, o)]);
+      var n = renglon(t, id), h = hoja(t);
+      if (!n) return;
+      Object.keys(p).forEach(function (k) {
+        var c = TABLAS[t].indexOf(k);
+        if (c >= 0) h.getRange(n, c + 1).setValue(String(p[k]));
+      });
+      if (memo[t]) memo[t].forEach(function (o) { if (o.id === id) Object.keys(p).forEach(function (k) { o[k] = String(p[k]); }); });
     },
+    /* Borrar vacía el renglón en vez de eliminarlo, para que los demás no cambien de lugar. */
     remove: function (t, id) {
-      var o = db.all(t).filter(function (r) { return r.id === id; })[0];
-      if (!o) return;
-      hoja(t).deleteRow(o._fila);
+      var n = renglon(t, id);
+      if (!n) return;
+      hoja(t).getRange(n, 1, 1, TABLAS[t].length).clearContent();
+      cache.remove('fila:' + t + ':' + id);
       delete memo[t];
     }
   };
@@ -60,7 +91,7 @@ function hojasDb_() {
 function contexto_() {
   var cache = CacheService.getScriptCache(), zona = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
   return {
-    db: hojasDb_(),
+    db: hojasDb_(cache),
     now: function () { return Date.now(); },
     hoy: function () { return Utilities.formatDate(new Date(), zona, 'yyyy-MM-dd'); },
     rand: function () { return Utilities.getUuid(); },

@@ -167,7 +167,7 @@ function vRun() {
 function ponerPregunta(q) {
   var a = S.al;
   if (q.fin) { clearInterval(timer); timer = null; a.res = q; a.v = 'fin'; render(); return; }
-  a.q = q; a.v = 'run'; a.bloq = false; a.lim = performance.now() + q.restante;   // performance.now no depende de la hora del teléfono
+  a.q = q; a.v = 'run'; a.bloq = false; a.desde = performance.now(); a.lim = a.desde + q.restante;   // performance.now no depende de la hora del teléfono
   render();
   if (!timer) timer = setInterval(tick, 100);
   tick();
@@ -188,7 +188,7 @@ function responder(di) {
   var a = S.al;
   if (a.bloq) return;
   a.bloq = true;
-  a.pend = { claseId: a.claseId, pos: a.q.pos, di: di };
+  a.pend = { claseId: a.claseId, pos: a.q.pos, di: di, ms: Math.round(performance.now() - a.desde) + (a.q.segundos * 1000 - a.q.restante) };
   document.querySelectorAll('.choice').forEach(function (b, i) { b.disabled = true; if (i === di) b.setAttribute('aria-pressed', 'true'); });
   mandarRespuesta();
 }

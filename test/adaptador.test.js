@@ -6,16 +6,23 @@ function googleFalso() {
   const hojas = {}, cache = {};
   const hoja = n => ({
     v: [],
-    getMaxRows() { return Math.max(1000, this.v.length); }, getLastRow() { return this.v.length; },
+    getMaxRows() { return Math.max(1000, this.v.length); }, getLastRow() { let i = this.v.length; while (i > 0 && this.v[i - 1].every(c => c === '')) i--; return i; },
     insertRowsAfter() {}, setFrozenRows() {},
-    appendRow(f) { this.v.push(f.slice()); },
-    deleteRow(n) { this.v.splice(n - 1, 1); },
-    getDataRange() { const s = this; return { getDisplayValues: () => s.v.map(r => r.slice()) }; },
-    getRange(f, c, nf, nc) { const s = this; const r = { setNumberFormat: () => r, setFontWeight: () => r, setValues(vals) { vals.forEach((row, i) => { s.v[f - 1 + i] = row.slice(); }); return r; } }; return r; }
+    getRange(f, c, nf = 1, nc = 1) {
+      const s = this, celdas = () => Array.from({ length: nf }, (_, i) => Array.from({ length: nc }, (_, j) => ((s.v[f - 1 + i] || [])[c - 1 + j]) ?? ''));
+      const r = {
+        setNumberFormat: () => r, setFontWeight: () => r,
+        getDisplayValues: celdas, getDisplayValue: () => celdas()[0][0],
+        setValues(vals) { vals.forEach((row, i) => { const fila = s.v[f - 1 + i] = s.v[f - 1 + i] || []; row.forEach((x, j) => { fila[c - 1 + j] = String(x); }); }); return r; },
+        setValue(x) { return r.setValues([[x]]); },
+        clearContent() { return r.setValues(Array.from({ length: nf }, () => Array(nc).fill(''))); }
+      };
+      return r;
+    }
   });
-  const ss = { getSheetByName: n => hojas[n] || null, insertSheet: n => (hojas[n] = hoja(n)), getSpreadsheetTimeZone: () => 'America/Argentina/Buenos_Aires', toast() {} };
+  const ss = { flush() {}, getSheetByName: n => hojas[n] || null, insertSheet: n => (hojas[n] = hoja(n)), getSpreadsheetTimeZone: () => 'America/Argentina/Buenos_Aires', toast() {} };
   return { hojas, sandbox: {
-    SpreadsheetApp: { getActive: () => ss },
+    SpreadsheetApp: { getActive: () => ss, flush() {} },
     CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = v; }, remove: k => { delete cache[k]; } }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: { getUuid: () => require('crypto').randomUUID(), formatDate: () => '2027-03-08' },
@@ -49,12 +56,16 @@ test('adaptador de Google: un cuestionario completo pasando por doPost', () => {
   let q = ok({ a: 'empezar', t: e.tk, claseId });
   while (!q.fin) q = ok({ a: 'responder', t: e.tk, claseId, pos: q.pos, di: q.opciones.indexOf('bien') });
   assert.strictEqual(q.puntos, 100);
-  assert.strictEqual(g.hojas.Respuestas.v.length, 6);                                // encabezado + 5 respuestas
   const it = g.hojas.Intentos.v[1];
   assert.ok(it[4] !== '' && it[6] === '5' && it[7] === '5', 'el intento quedó cerrado con 5 de 5 en su renglón');
+  assert.strictEqual(Object.keys(JSON.parse(it[11])).length, 5, 'las 5 respuestas quedaron en el renglón del intento');
+  assert.strictEqual(g.hojas.Respuestas, undefined, 'ya no hay pestaña Respuestas');
   ok({ a: 'marca', t, claseId, alumnoId: e.alumnos[0].id, estado: 'T' });
   ok({ a: 'marca', t, claseId, alumnoId: e.alumnos[0].id, estado: '' });
-  assert.strictEqual(g.hojas.Marcas.v.length, 1);
-  assert.deepStrictEqual(ok({ a: 'asistencia', t, cursoId: p.cursos[0].id }).filas.map(f => f.celdas[0].k), ['A', 'P']);
+  assert.ok(g.hojas.Marcas.v.slice(1).every(r => r.every(c => c === '')), 'borrar vacía el renglón');
+  const filaCata = g.hojas.Alumnos.v.findIndex(r => r[2] === 'Cata');
+  ok({ a: 'curso.guardar', t, id: p.cursos[0].id, nombre: '1° A', alumnos: 'Dani' });   // agregar después de borrar no mueve a nadie
+  assert.strictEqual(g.hojas.Alumnos.v.findIndex(r => r[2] === 'Cata'), filaCata);
+  assert.deepStrictEqual(ok({ a: 'asistencia', t, cursoId: p.cursos[0].id }).filas.map(f => f.nombre + ' ' + f.celdas[0].k), ['Ana A', 'Cata P', 'Dani A']);
   assert.strictEqual(post({ a: 'panel', t: 'inventado' }).code, 'ses');
 });

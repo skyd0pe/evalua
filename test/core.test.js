@@ -102,9 +102,24 @@ test('cuestionario: se guarda pregunta por pregunta y se corrige en el servidor'
   w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
   const r = rendir(w, tk, 3);
   assert.deepStrictEqual(r, { fin: true, aciertos: 3, total: 5, puntos: 60 });
-  assert.strictEqual(w.ctx.db.all('Respuestas').length, 5);
+  assert.strictEqual(Object.keys(JSON.parse(w.ctx.db.all('Intentos')[0].resp)).length, 5);
   assert.strictEqual(w.mal('empezar', { t: tk, claseId: w.clase.id }).code, 'hecho');   // una sola vez
   assert.strictEqual(w.ctx.db.all('Intentos').length, 1);
+});
+test('tiempo: el teléfono informa lo que tardó y el servidor pone un tope', () => {
+  const w = mundo(), tk = w.entra(0);
+  w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
+  let q = w.ok('empezar', { t: tk, claseId: w.clase.id });
+  const bien = () => q.opciones.findIndex(o => o.startsWith('bien'));
+  w.ctx.t += 25000;                                    // 25 s en el servidor por la red, pero el alumno tardó 18
+  q = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: bien(), ms: 18000 });
+  w.ctx.t += 5000;                                     // el teléfono dice 21 s: pasado de tiempo
+  q = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 1, di: bien(), ms: 21000 });
+  w.ctx.t += 40000;                                    // el teléfono miente (dice 5 s) pero pasaron 40: el servidor lo corta
+  w.ok('responder', { t: tk, claseId: w.clase.id, pos: 2, di: bien(), ms: 5000 });
+  const r = Object.values(JSON.parse(w.ctx.db.all('Intentos')[0].resp));
+  assert.deepStrictEqual(r.map(x => x[0] === null ? 'tarde' : 'ok'), ['ok', 'tarde', 'tarde']);
+  assert.strictEqual(r[0][1], 18000);
 });
 test('tiempo: lo mide el servidor; una respuesta tardía cuenta como sin responder', () => {
   const w = mundo(), tk = w.entra(0);
@@ -112,8 +127,7 @@ test('tiempo: lo mide el servidor; una respuesta tardía cuenta como sin respond
   let q = w.ok('empezar', { t: tk, claseId: w.clase.id });
   w.ctx.t += 60000;                                     // el teléfono "frenó" su reloj un minuto
   w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: q.opciones.findIndex(o => o.startsWith('bien')) });
-  assert.strictEqual(w.ctx.db.all('Respuestas')[0].elegida, '');
-  assert.strictEqual(w.ctx.db.all('Respuestas')[0].ms, '20000');
+  assert.deepStrictEqual(Object.values(JSON.parse(w.ctx.db.all('Intentos')[0].resp)), [[null, 20000]]);
 });
 test('reconexión: recargar no borra el intento, y la pregunta que estaba en pantalla se pierde', () => {
   const w = mundo(), tk = w.entra(0);
@@ -125,7 +139,7 @@ test('reconexión: recargar no borra el intento, y la pregunta que estaba en pan
   assert.strictEqual(w.ok('empezar', { t: tk, claseId: w.clase.id }).pos, 1);   // reintento rápido: misma pregunta, el reloj sigue
   w.ctx.t += 8000;
   assert.strictEqual(w.ok('empezar', { t: tk, claseId: w.clase.id }).pos, 2);   // salió y volvió: la 1 quedó sin responder
-  assert.strictEqual(w.ctx.db.all('Respuestas')[1].elegida, '');
+  assert.strictEqual(Object.values(JSON.parse(w.ctx.db.all('Intentos')[0].resp))[1][0], null);
   assert.strictEqual(w.ctx.db.all('Intentos').length, 1);
 });
 test('reenvío: la misma respuesta mandada dos veces se guarda una sola', () => {
@@ -135,7 +149,7 @@ test('reenvío: la misma respuesta mandada dos veces se guarda una sola', () => 
   const a = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: 1 });
   const b = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: 2 });
   assert.strictEqual(a.pos, 1); assert.strictEqual(b.pos, 1); assert.strictEqual(a.texto, b.texto);
-  assert.strictEqual(w.ctx.db.all('Respuestas').length, 1);
+  assert.strictEqual(Object.keys(JSON.parse(w.ctx.db.all('Intentos')[0].resp)).length, 1);
 });
 test('si se pierde la memoria rápida, el intento se reconstruye desde la planilla', () => {
   const w = mundo(), tk = w.entra(0);
@@ -275,7 +289,7 @@ test('carga: 35 alumnos rindiendo intercalados, sin intentos duplicados ni respu
     if (r.fin) { a.fin = r; vivos--; } else a.q = r;
   }
   assert.strictEqual(ctx.db.all('Intentos').length, 35);
-  assert.strictEqual(ctx.db.all('Respuestas').length, 35 * 8);
+  assert.strictEqual(ctx.db.all('Intentos').reduce((s, i) => s + Object.keys(JSON.parse(i.resp)).length, 0), 35 * 8);
   assert.ok(al.every(a => a.fin.puntos === 100));
   const ordenes = new Set(ctx.db.all('Intentos').map(i => JSON.parse(i.orden).map(x => x[0]).sort().join()));
   assert.ok(ordenes.size > 25, 'casi todos deberían recibir un juego distinto de preguntas: ' + ordenes.size);
