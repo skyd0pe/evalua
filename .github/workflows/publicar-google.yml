@@ -52,6 +52,39 @@ jobs:
           else
             printf '%s' "$CLASPRC" > "$HOME/.clasprc.json"
             chmod 600 "$HOME/.clasprc.json"
+            # clasp 3 guarda la credencial con otro formato ("tokens"); clasp 2.4.2
+            # espera "token" + "oauth2ClientSettings". Si vino del 3, se convierte.
+            # Solo se muestran nombres de campos, nunca valores.
+            python3 - <<'PY'
+          import json, os, sys
+          p = os.path.expanduser('~/.clasprc.json')
+          try:
+              d = json.load(open(p))
+          except Exception as e:
+              print('::error::El secreto CLASPRC_JSON no es un JSON válido (' + type(e).__name__ + '). Volvé a copiar el archivo entero.')
+              sys.exit(1)
+          print('Campos de la credencial:', sorted(d.keys()))
+          if 'tokens' in d and 'token' not in d:
+              t = d['tokens'].get('default') or next(iter(d['tokens'].values()))
+              print('Formato de clasp 3; campos:', sorted(t.keys()))
+              d = {
+                  'token': {
+                      'access_token': t.get('access_token', ''),
+                      'refresh_token': t['refresh_token'],
+                      'scope': t.get('scope', ''),
+                      'token_type': t.get('token_type', 'Bearer'),
+                      'expiry_date': 1,
+                  },
+                  'oauth2ClientSettings': {
+                      'clientId': t['client_id'],
+                      'clientSecret': t['client_secret'],
+                      'redirectUri': 'http://localhost',
+                  },
+                  'isLocalCreds': False,
+              }
+              json.dump(d, open(p, 'w'))
+              print('Convertida al formato de clasp 2.4.2.')
+          PY
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
 
