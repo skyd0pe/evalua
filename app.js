@@ -518,7 +518,7 @@ setInterval(sondear, 5000);
 /* ================= marco y eventos ================= */
 function render() {
   if (S.rol === 'alumno' && S.al.v === 'run' && S.al.run) { app.innerHTML = vRun(); return; }
-  var h = '<header class="top"><div class="brand"><h1>Repaso Relámpago</h1>' + (DEMO ? '<span class="pill warn">Demostración</span>' : '') + '</div>' +
+  var h = '<header class="top"><div class="brand"><h1>Evaluá</h1>' + (DEMO ? '<span class="pill warn">Demostración</span>' : '') + '</div>' +
     '<div class="seg" role="group" aria-label="Vista">' + [['alumno', 'Alumno'], ['docente', 'Docente']].map(function (r) {
       return '<button data-act="rol" data-v="' + r[0] + '" aria-pressed="' + (S.rol === r[0]) + '">' + r[1] + '</button>'; }).join('') + '</div></header>';
   if (DEMO) h += '<p class="note">Demostración: el servidor está simulado dentro de este navegador y los datos quedan solo en este dispositivo.</p>';

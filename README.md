@@ -1,4 +1,4 @@
-# Evaluá (Repaso Relámpago)
+# Evaluá
 
 Cuestionarios cortos para evaluar en cada clase: el docente abre un cuestionario, cada alumno responde desde su teléfono contra reloj, y quedan la nota, la asistencia y una tabla de puntos por cuatrimestre.
 
