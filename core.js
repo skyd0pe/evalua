@@ -180,11 +180,10 @@ function guardarSt(ctx, st) { ctx.cache.put('it:' + st.claseId + ':' + st.alumno
 function estado(ctx, claseId, alumnoId) {   // de la memoria rápida o, si no está, reconstruido desde la planilla
   var id = ctx.cache.get('it:' + claseId + ':' + alumnoId), st = id && cget(ctx, 'st:' + id);
   if (st) return st;
-  var it = intentos(ctx).filter(function (x) { return x.claseId === claseId && x.alumnoId === alumnoId; })[0];
-  if (!it) return null;
-  var cl = uno(ctx, 'Clases', claseId), orden = J(it.orden, []), ids = {};
-  ids[it.id] = 1;
-  var m = respuestasDe(ctx, ids)[it.id] || {};
+  var it = ctx.db.get('Intentos', idIntento(claseId, alumnoId));   // un solo renglón, sin leer toda la pestaña
+  if (!it || it.inicio === '') return null;
+  var cl = uno(ctx, 'Clases', claseId), orden = J(it.orden, []), r0 = respDe(it), m = {};
+  Object.keys(r0).forEach(function (k) { m[k] = { e: r0[k][0], ms: num(r0[k][1]) }; });
   st = { id: it.id, claseId: claseId, alumnoId: alumnoId, bancoId: cl.bancoId, seg: num(cl.segundos), orden: orden,
     pos: Object.keys(m).length, enviada: 0, ok: corregir(banco(ctx, cl.bancoId), orden, soloElegidas(m)).ok, salidas: num(it.salidas), resp: respDe(it) };
   if (it.fin) { st.fin = true; st.ok = num(it.aciertos); st.total = num(it.total); }
@@ -385,11 +384,10 @@ var ACCIONES = {
     var s = sesion(ctx, r, 'alumno'), cl = uno(ctx, 'Clases', r.claseId);
     if (!cl || cl.cursoId !== s.cursoId) throw E('Ese cuestionario no es de tu curso.');
     if (cl.estado === 'abierto') throw E('Vas a poder ver la corrección cuando tu profe cierre el cuestionario.');
-    var it = intentos(ctx).filter(function (x) { return x.claseId === cl.id && x.alumnoId === s.alumnoId; })[0];
-    if (!it) throw E('No rendiste este cuestionario.');
-    var b = banco(ctx, cl.bancoId), ids = {};
-    ids[it.id] = 1;
-    var m = respuestasDe(ctx, ids)[it.id] || {};
+    var it = ctx.db.get('Intentos', idIntento(cl.id, s.alumnoId));
+    if (!it || it.inicio === '') throw E('No rendiste este cuestionario.');
+    var b = banco(ctx, cl.bancoId), r0 = respDe(it), m = {};
+    Object.keys(r0).forEach(function (k) { m[k] = { e: r0[k][0], ms: num(r0[k][1]) }; });
     return { titulo: cl.titulo, aciertos: num(it.aciertos), total: num(it.total), puntos: puntos(num(it.aciertos), num(it.total)),
       items: J(it.orden, []).map(function (p) {
         var q = pregDe(b, p[0]), e = eleg(m[p[0]]);
@@ -715,6 +713,7 @@ function memCtx(data, cache) {
     },
     db: {
       all: function (t) { return data[t] || (data[t] = []); },
+      get: function (t, id) { return uno(ctx, t, id) || null; },
       insert: function (t, o) { ctx.db.all(t).push(fila(t, o)); },
       insertMany: function (t, os) { os.forEach(function (o) { ctx.db.all(t).push(fila(t, o)); }); },
       update: function (t, id, p) { var r = uno(ctx, t, id); if (r) Object.keys(p).forEach(function (k) { r[k] = String(p[k]); }); return !!r; },

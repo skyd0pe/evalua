@@ -48,6 +48,15 @@ function hojasDb_(cache) {
       }).filter(function (o) { return o.id !== ''; });
       return memo[t];
     },
+    /* Un renglón por id, sin leer toda la pestaña (el número de renglón queda guardado en la memoria rápida). */
+    get: function (t, id) {
+      if (memo[t]) return memo[t].filter(function (o) { return o.id === id; })[0] || null;
+      var n = renglon(t, id);
+      if (!n) return null;
+      var r = hoja(t).getRange(n, 1, 1, TABLAS[t].length).getDisplayValues()[0], o = {};
+      TABLAS[t].forEach(function (k, j) { o[k] = r[j]; });
+      return o.id === id ? o : null;
+    },
     insert: function (t, o) { db.insertMany(t, [o]); },
     /* Agregar renglones es lo único que necesita turno: dos alumnos agregando a la vez se pisarían. */
     insertMany: function (t, os) {
