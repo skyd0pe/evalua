@@ -1,0 +1,88 @@
+# Publica el servidor en Google Apps Script cada vez que cambian las reglas (core.js) o el adaptador (backend/).
+# Corre los tests primero: si alguno falla, no publica nada.
+# Actualiza la implementación que ya existe, así la dirección que usa la app no cambia.
+# Necesita el secreto CLASPRC_JSON (ver README, "Publicación automática"). Sin él, avisa y no hace nada.
+name: Publicar en Google
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - core.js
+      - backend/**
+      - test/core.test.js
+      - test/adaptador.test.js
+      - .github/workflows/publicar-google.yml
+  workflow_dispatch:
+
+concurrency:
+  group: publicar-google
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SCRIPT_ID: 1nuOi1X-QQx-8yz8g3AEvAT08khfpUmKTYRiAl-JgbarrwzAyfOX3aRjI
+  DEPLOYMENT_ID: AKfycbzFclYSxb7tjKDAvBmKqizkFZlU95wxq_OdIVZiQA6hDc1UBvCE9eaKyYiE4BjaT6JSdw
+  CLASP: "@google/clasp@2.4.2"
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Tests de reglas y adaptador
+        run: node --test test/core.test.js test/adaptador.test.js
+
+      - name: Revisar la credencial
+        id: cred
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC" ]; then
+            echo "::warning::Falta el secreto CLASPRC_JSON: los tests pasaron, pero no se publicó en Google. Ver README, 'Publicación automática'."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s' "$CLASPRC" > "$HOME/.clasprc.json"
+            chmod 600 "$HOME/.clasprc.json"
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Armar los archivos del proyecto de Google
+        if: steps.cred.outputs.ok == 'true'
+        run: |
+          mkdir -p gas
+          cp core.js gas/Core.js
+          cp backend/Code.gs gas/Code.js
+          cp backend/appsscript.json gas/appsscript.json
+          printf '{"scriptId":"%s","rootDir":"."}' "$SCRIPT_ID" > gas/.clasp.json
+
+      - name: Subir el código
+        if: steps.cred.outputs.ok == 'true'
+        working-directory: gas
+        run: npx -y "$CLASP" push --force
+
+      - name: Publicar una versión nueva en la misma dirección
+        if: steps.cred.outputs.ok == 'true'
+        working-directory: gas
+        run: npx -y "$CLASP" deploy --deploymentId "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
+
+      - name: Comprobar que responde
+        if: steps.cred.outputs.ok == 'true'
+        run: |
+          sleep 5
+          URL="https://script.google.com/macros/s/$DEPLOYMENT_ID/exec"
+          RESP=$(curl -sSL -X POST -H 'Content-Type: text/plain;charset=utf-8' --data '{"a":"cursos"}' "$URL")
+          echo "$RESP" | head -c 300; echo
+          echo "$RESP" | grep -q '"ok":true' || { echo "::error::La app publicada no respondió bien."; exit 1; }
+
+      - name: Borrar la credencial del equipo de GitHub
+        if: always()
+        run: rm -f "$HOME/.clasprc.json"
