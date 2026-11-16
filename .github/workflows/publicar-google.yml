@@ -73,10 +73,11 @@ jobs:
                       pass
               # Si vino en base64.
               import base64
-              try:
-                  return json.loads(base64.b64decode(txt).decode('utf-8-sig'))
-              except Exception:
-                  pass
+              for dec in (base64.b64decode, base64.urlsafe_b64decode):
+                  try:
+                      return json.loads(dec(txt + '=' * (-len(txt) % 4)).decode('utf-8-sig'))
+                  except Exception:
+                      pass
               return json.loads(txt)
           def tipo(c):
               return 'nada' if not c else 'letra' if c.isalpha() else 'número' if c.isdigit() else 'espacio' if c.isspace() else 'signo ' + ('comilla' if c in '"\'' else 'otro')
@@ -85,7 +86,9 @@ jobs:
           except Exception as e:
               print('::error::Pistas: primer caracter:', tipo(crudo[:1]), '| último:', tipo(crudo[-1:]),
                     '| tiene llave en la posición:', crudo.find('{'), '| renglones:', crudo.count('\n') + 1,
-                    '| tiene la palabra token:', 'token' in crudo)
+                    '| tiene la palabra token:', 'token' in crudo, '| puntos:', crudo.count('.'),
+                    '| parece JWT (eyJ):', crudo.startswith('eyJ'), '| parece token de acceso (ya29):', crudo.startswith('ya29'),
+                    '| parece refresh (1//):', crudo.startswith('1//'), '| espacios:', crudo.count(' '))
               # Pistas sin mostrar el contenido: largo, cómo empieza y termina, dónde falla.
               print('::error::El secreto CLASPRC_JSON no es un JSON válido. Largo:', len(crudo),
                     '| empieza con llave:', crudo[:1] == '{', '| termina con llave:', crudo[-1:] == '}',
