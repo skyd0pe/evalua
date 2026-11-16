@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { api, parseBlock, memCtx, celda, puntos, periodoDe, H4 } = require('../core.js');
+const empezados = ctx => ctx.db.all('Intentos').filter(i => i.inicio !== '');   // sin los renglones reservados al abrir
 
 const PREGS = Array.from({ length: 10 }, (_, i) => `${i + 1}. Pregunta ${i}\n*a) bien${i}\nb) mal\nc) peor\nd) nada`).join('\n\n');
 
@@ -107,9 +108,9 @@ test('cuestionario: se guarda pregunta por pregunta y se corrige en el servidor'
   w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
   const r = rendir(w, tk, 3);
   assert.deepStrictEqual(r, { fin: true, aciertos: 3, total: 5, puntos: 60 });
-  assert.strictEqual(Object.keys(JSON.parse(w.ctx.db.all('Intentos')[0].resp)).length, 5);
+  assert.strictEqual(Object.keys(JSON.parse(empezados(w.ctx)[0].resp)).length, 5);
   assert.strictEqual(w.mal('empezar', { t: tk, claseId: w.clase.id }).code, 'hecho');   // una sola vez
-  assert.strictEqual(w.ctx.db.all('Intentos').length, 1);
+  assert.strictEqual(empezados(w.ctx).length, 1);
 });
 test('tiempo: el teléfono informa lo que tardó y el servidor pone un tope', () => {
   const w = mundo(), tk = w.entra(0);
@@ -122,7 +123,7 @@ test('tiempo: el teléfono informa lo que tardó y el servidor pone un tope', ()
   q = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 1, di: bien(), ms: 21000 });
   w.ctx.t += 40000;                                    // el teléfono miente (dice 5 s) pero pasaron 40: el servidor lo corta
   w.ok('responder', { t: tk, claseId: w.clase.id, pos: 2, di: bien(), ms: 5000 });
-  const r = Object.values(JSON.parse(w.ctx.db.all('Intentos')[0].resp));
+  const r = Object.values(JSON.parse(empezados(w.ctx)[0].resp));
   assert.deepStrictEqual(r.map(x => x[0] === null ? 'tarde' : 'ok'), ['ok', 'tarde', 'tarde']);
   assert.strictEqual(r[0][1], 18000);
 });
@@ -132,7 +133,7 @@ test('tiempo: lo mide el servidor; una respuesta tardía cuenta como sin respond
   let q = w.ok('empezar', { t: tk, claseId: w.clase.id });
   w.ctx.t += 60000;                                     // el teléfono "frenó" su reloj un minuto
   w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: q.opciones.findIndex(o => o.startsWith('bien')) });
-  assert.deepStrictEqual(Object.values(JSON.parse(w.ctx.db.all('Intentos')[0].resp)), [[null, 20000]]);
+  assert.deepStrictEqual(Object.values(JSON.parse(empezados(w.ctx)[0].resp)), [[null, 20000]]);
 });
 test('reconexión: recargar no borra el intento, y la pregunta que estaba en pantalla se pierde', () => {
   const w = mundo(), tk = w.entra(0);
@@ -144,8 +145,8 @@ test('reconexión: recargar no borra el intento, y la pregunta que estaba en pan
   assert.strictEqual(w.ok('empezar', { t: tk, claseId: w.clase.id }).pos, 1);   // reintento rápido: misma pregunta, el reloj sigue
   w.ctx.t += 8000;
   assert.strictEqual(w.ok('empezar', { t: tk, claseId: w.clase.id }).pos, 2);   // salió y volvió: la 1 quedó sin responder
-  assert.strictEqual(Object.values(JSON.parse(w.ctx.db.all('Intentos')[0].resp))[1][0], null);
-  assert.strictEqual(w.ctx.db.all('Intentos').length, 1);
+  assert.strictEqual(Object.values(JSON.parse(empezados(w.ctx)[0].resp))[1][0], null);
+  assert.strictEqual(empezados(w.ctx).length, 1);
 });
 test('reenvío: la misma respuesta mandada dos veces se guarda una sola', () => {
   const w = mundo(), tk = w.entra(0);
@@ -154,17 +155,17 @@ test('reenvío: la misma respuesta mandada dos veces se guarda una sola', () => 
   const a = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: 1 });
   const b = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: 2 });
   assert.strictEqual(a.pos, 1); assert.strictEqual(b.pos, 1); assert.strictEqual(a.texto, b.texto);
-  assert.strictEqual(Object.keys(JSON.parse(w.ctx.db.all('Intentos')[0].resp)).length, 1);
+  assert.strictEqual(Object.keys(JSON.parse(empezados(w.ctx)[0].resp)).length, 1);
 });
 test('si se pierde la memoria rápida, el intento se reconstruye desde la planilla', () => {
   const w = mundo(), tk = w.entra(0);
   w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
   let q = w.ok('empezar', { t: tk, claseId: w.clase.id });
   w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: q.opciones.findIndex(o => o.startsWith('bien')) });
-  const it = w.ctx.db.all('Intentos')[0];
+  const it = empezados(w.ctx)[0];
   w.ctx.cache.remove('st:' + it.id); w.ctx.cache.remove('it:' + it.claseId + ':' + it.alumnoId);
   assert.strictEqual(w.ok('empezar', { t: tk, claseId: w.clase.id }).pos, 1);
-  assert.strictEqual(w.ctx.db.all('Intentos').length, 1);
+  assert.strictEqual(empezados(w.ctx).length, 1);
 });
 test('cerrar: los intentos a medias se cierran con lo respondido; la corrección se ve recién al cerrar', () => {
   const w = mundo(), tk = w.entra(0);
@@ -243,7 +244,7 @@ test('anular una pregunta o corregir cuál era la correcta recalcula las notas',
   const w = mundo(), tk = w.entra(0);
   w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
   rendir(w, tk, 3);
-  const it = () => w.ctx.db.all('Intentos')[0], orden = JSON.parse(it().orden);
+  const it = () => empezados(w.ctx)[0], orden = JSON.parse(it().orden);
   w.doc('pregunta.anular', { id: orden[4][0], anulada: true });          // la quinta estaba mal respondida
   assert.deepStrictEqual([it().aciertos, it().total], ['3', '4']);
   w.doc('pregunta.guardar', { id: orden[3][0], texto: 'Pregunta corregida\na) bien\n*b) mal\nc) peor\nd) nada' });   // la cuarta: ahora la correcta es otra
@@ -273,6 +274,25 @@ test('el mismo banco se usa en varios cursos, y dos alumnos en un mismo teléfon
   assert.deepStrictEqual(v.filas.map(f => [f.e, f.dup || '']), [['listo', 'Bruno Paz'], ['listo', 'Ana Díaz'], ['no', '']]);
 });
 
+test('al abrir se reserva un renglón por alumno; no cuenta como intento ni como falta, y Empezar lo completa', () => {
+  const w = mundo();
+  w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
+  assert.strictEqual(w.ctx.db.all('Intentos').length, 3);
+  assert.strictEqual(empezados(w.ctx).length, 0);
+  assert.deepStrictEqual(w.doc('vivo', { claseId: w.clase.id }).filas.map(f => f.e), ['no', 'no', 'no']);
+  rendir(w, w.entra(0), 2);
+  assert.strictEqual(w.ctx.db.all('Intentos').length, 3, 'Empezar completa el renglón reservado, no agrega otro');
+  w.doc('clase.estado', { id: w.clase.id, estado: 'cerrado' });
+  w.doc('clase.estado', { id: w.clase.id, estado: 'abierto', ausentes: true });
+  assert.strictEqual(w.ctx.db.all('Intentos').length, 3, 'reabrir no duplica las reservas');
+  const a = w.doc('asistencia', { cursoId: w.curso.id });
+  assert.deepStrictEqual(a.filas.map(f => f.celdas[0].k), ['P', 'A', 'A']);
+  const it = empezados(w.ctx)[0];
+  w.doc('intento.reiniciar', { id: it.id });
+  assert.strictEqual(empezados(w.ctx).length, 0, 'reiniciar deja el renglón reservado otra vez');
+  rendir(w, w.entra(0), 1);
+  assert.strictEqual(empezados(w.ctx).length, 1);
+});
 test('carga: 35 alumnos rindiendo intercalados, sin intentos duplicados ni respuestas perdidas', () => {
   const ctx = memCtx(); ctx.t = new Date(2027, 2, 8, 10).getTime();
   ctx.db.insert('Config', { id: 'clave', valor: 'x' });
@@ -293,9 +313,9 @@ test('carga: 35 alumnos rindiendo intercalados, sin intentos duplicados ni respu
     const r = ok('responder', { t: a.tk, claseId, pos: a.q.pos, di: a.q.opciones.indexOf('bien') });
     if (r.fin) { a.fin = r; vivos--; } else a.q = r;
   }
-  assert.strictEqual(ctx.db.all('Intentos').length, 35);
-  assert.strictEqual(ctx.db.all('Intentos').reduce((s, i) => s + Object.keys(JSON.parse(i.resp)).length, 0), 35 * 8);
+  assert.strictEqual(empezados(ctx).length, 35);
+  assert.strictEqual(empezados(ctx).reduce((s, i) => s + Object.keys(JSON.parse(i.resp)).length, 0), 35 * 8);
   assert.ok(al.every(a => a.fin.puntos === 100));
-  const ordenes = new Set(ctx.db.all('Intentos').map(i => JSON.parse(i.orden).map(x => x[0]).sort().join()));
+  const ordenes = new Set(empezados(ctx).map(i => JSON.parse(i.orden).map(x => x[0]).sort().join()));
   assert.ok(ordenes.size > 25, 'casi todos deberían recibir un juego distinto de preguntas: ' + ordenes.size);
 });

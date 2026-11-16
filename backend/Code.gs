@@ -69,12 +69,13 @@ function hojasDb_(cache) {
     /* Cambia solo las celdas pedidas, sin tocar el resto del renglón. */
     update: function (t, id, p) {
       var n = renglon(t, id), h = hoja(t);
-      if (!n) return;
+      if (!n) return false;
       Object.keys(p).forEach(function (k) {
         var c = TABLAS[t].indexOf(k);
         if (c >= 0) h.getRange(n, c + 1).setValue(String(p[k]));
       });
       if (memo[t]) memo[t].forEach(function (o) { if (o.id === id) Object.keys(p).forEach(function (k) { o[k] = String(p[k]); }); });
+      return true;
     },
     /* Borrar vacía el renglón en vez de eliminarlo, para que los demás no cambien de lugar. */
     remove: function (t, id) {

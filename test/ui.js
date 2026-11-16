@@ -4,7 +4,12 @@ const path = require('path');
 (async () => {
   const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'es-AR', timezoneId: 'America/Argentina/Buenos_Aires' });
-  const url = 'file://' + path.join(__dirname, '../index.html');
+  // Copia de index.html sin la dirección del servidor: la prueba corre en modo demostración y no toca Google.
+  const fs = require('fs'), demo = path.join(__dirname, 'demo.html');
+  fs.writeFileSync(demo, fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
+    .replace(/var API_URL = '[^']*';/, "var API_URL = '';").replace(/src="(core|app)\.js"/g, 'src="../$1.js"'));
+  fs.copyFileSync(path.join(__dirname, '../demo.js'), path.join(__dirname, 'demo.js'));
+  const url = 'file://' + demo;
   const errs = [], fallas = [];
   const vigilar = p => { p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error' && !/fonts\.g|ERR_|Failed to load/.test(m.text())) errs.push(m.text()); }); };
   const doc = await ctx.newPage(), al = await ctx.newPage(); vigilar(doc); vigilar(al);

@@ -144,9 +144,13 @@ function corregir(b, orden, resp) {
 /* Las respuestas de un intento viven en su propio renglón, columna "resp": {pregId: [opción elegida o null, milisegundos]}.
    Así, mientras los alumnos rinden, cada uno escribe solo en su renglón y nadie agrega renglones. */
 function respDe(it) { return J(it.resp, {}) || {}; }
+/* Al abrir un cuestionario se reserva un renglón vacío por alumno (sin "inicio"): así, cuando todos tocan Empezar a la vez,
+   cada uno completa el suyo y nadie hace fila para agregar renglones. Esos renglones reservados no son intentos. */
+function intentos(ctx) { return ctx.db.all('Intentos').filter(function (it) { return it.inicio !== ''; }); }
+function idIntento(claseId, alumnoId) { return claseId + '|' + alumnoId; }
 function respuestasDe(ctx, ids) {   // {intentoId: {pregId: {e, ms}}}
   var out = {};
-  ctx.db.all('Intentos').forEach(function (it) {
+  intentos(ctx).forEach(function (it) {
     if (!ids[it.id]) return;
     var r = respDe(it), m = out[it.id] = {};
     Object.keys(r).forEach(function (k) { m[k] = { e: r[k][0], ms: num(r[k][1]) }; });
@@ -159,7 +163,7 @@ function recalcular(ctx, bancoId) {   // después de corregir o anular una pregu
   ctx.cache.remove('bk:' + bancoId);
   var b = banco(ctx, bancoId), cls = {}, ids = {};
   ctx.db.all('Clases').forEach(function (c) { if (c.bancoId === bancoId) cls[c.id] = 1; });
-  var its = ctx.db.all('Intentos').filter(function (it) { return cls[it.claseId] && it.fin; });
+  var its = intentos(ctx).filter(function (it) { return cls[it.claseId] && it.fin; });
   its.forEach(function (it) { ids[it.id] = 1; });
   var resp = respuestasDe(ctx, ids);
   its.forEach(function (it) {
@@ -176,7 +180,7 @@ function guardarSt(ctx, st) { ctx.cache.put('it:' + st.claseId + ':' + st.alumno
 function estado(ctx, claseId, alumnoId) {   // de la memoria rápida o, si no está, reconstruido desde la planilla
   var id = ctx.cache.get('it:' + claseId + ':' + alumnoId), st = id && cget(ctx, 'st:' + id);
   if (st) return st;
-  var it = ctx.db.all('Intentos').filter(function (x) { return x.claseId === claseId && x.alumnoId === alumnoId; })[0];
+  var it = intentos(ctx).filter(function (x) { return x.claseId === claseId && x.alumnoId === alumnoId; })[0];
   if (!it) return null;
   var cl = uno(ctx, 'Clases', claseId), orden = J(it.orden, []), ids = {};
   ids[it.id] = 1;
@@ -232,7 +236,7 @@ function tablaDe(ctx, per) {
   if (t) return t;
   var corte = corteDe(ctx), cl = {}, pts = {}, sum = {}, n = {};
   ctx.db.all('Clases').forEach(function (c) { if (periodoDe(c.fecha, corte) === per) cl[c.id] = c.cursoId; });
-  ctx.db.all('Intentos').forEach(function (it) {
+  intentos(ctx).forEach(function (it) {
     var c = cl[it.claseId];
     if (!c || !it.fin) return;
     var p = puntos(num(it.aciertos), num(it.total));
@@ -304,7 +308,7 @@ var ACCIONES = {
   inicio: function (ctx, r) {
     var s = sesion(ctx, r, 'alumno'), per = periodoHoy(ctx), corte = corteDe(ctx), mios = {};
     var al = uno(ctx, 'Alumnos', s.alumnoId), cu = uno(ctx, 'Cursos', s.cursoId);
-    ctx.db.all('Intentos').forEach(function (it) { if (it.alumnoId === s.alumnoId) mios[it.claseId] = it; });
+    intentos(ctx).forEach(function (it) { if (it.alumnoId === s.alumnoId) mios[it.claseId] = it; });
     var clases = ctx.db.all('Clases').filter(function (c) {
       return c.cursoId === s.cursoId && c.bancoId && periodoDe(c.fecha, corte) === per && (c.estado === 'abierto' || mios[c.id]);
     }).sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; }).map(function (c) {
@@ -333,15 +337,17 @@ var ACCIONES = {
     if (cl.estado !== 'abierto') throw E('Este cuestionario está cerrado.', 'cerrado');
     var pregs = banco(ctx, cl.bancoId).filter(function (q) { return !q.anulada; });
     if (!pregs.length) throw E('Este cuestionario no tiene preguntas.');
-    var k = 'it:' + cl.id + ':' + s.alumnoId, id = nid(ctx, 'i'), libre = false;
+    var k = 'it:' + cl.id + ':' + s.alumnoId, id = idIntento(cl.id, s.alumnoId), libre = false;
     ctx.lock(function () { if (!ctx.cache.get(k)) { ctx.cache.put(k, id, 7200); libre = true; } });   // evita dos intentos por doble toque
     if (!libre) throw E('Ya estás empezando este cuestionario. Esperá un segundo y tocá de nuevo.', 'ya');
     var orden = mezclar(ctx, pregs).slice(0, Math.max(1, num(cl.porAlumno))).map(function (q) {
       return [q.id, mezclar(ctx, q.ops.map(function (_, i) { return i; }))];
     });
+    var datos = { inicio: ctx.now(), fin: '', orden: JSON.stringify(orden), aciertos: 0, total: orden.length,
+      enCasa: cl.modo === 'ausentes', salidas: 0, device: s.device || '', resp: '{}' };
     try {
-      ctx.db.insert('Intentos', { id: id, claseId: cl.id, alumnoId: s.alumnoId, inicio: ctx.now(), fin: '', orden: JSON.stringify(orden),
-        aciertos: 0, total: orden.length, enCasa: cl.modo === 'ausentes', salidas: 0, device: s.device || '', resp: '{}' });
+      if (!ctx.db.update('Intentos', id, datos))   // sin renglón reservado (alumno nuevo, o intento reiniciado): se agrega
+        ctx.db.insert('Intentos', Object.assign({ id: id, claseId: cl.id, alumnoId: s.alumnoId }, datos));
     } catch (e) { ctx.cache.remove(k); throw e; }   // si no se pudo guardar, que pueda volver a tocar Empezar
     st = { id: id, claseId: cl.id, alumnoId: s.alumnoId, bancoId: cl.bancoId, seg: num(cl.segundos), orden: orden, pos: 0, enviada: ctx.now(), ok: 0, salidas: 0, resp: {} };
     guardarSt(ctx, st);
@@ -379,7 +385,7 @@ var ACCIONES = {
     var s = sesion(ctx, r, 'alumno'), cl = uno(ctx, 'Clases', r.claseId);
     if (!cl || cl.cursoId !== s.cursoId) throw E('Ese cuestionario no es de tu curso.');
     if (cl.estado === 'abierto') throw E('Vas a poder ver la corrección cuando tu profe cierre el cuestionario.');
-    var it = ctx.db.all('Intentos').filter(function (x) { return x.claseId === cl.id && x.alumnoId === s.alumnoId; })[0];
+    var it = intentos(ctx).filter(function (x) { return x.claseId === cl.id && x.alumnoId === s.alumnoId; })[0];
     if (!it) throw E('No rendiste este cuestionario.');
     var b = banco(ctx, cl.bancoId), ids = {};
     ids[it.id] = 1;
@@ -409,7 +415,7 @@ var ACCIONES = {
     var corte = corteDe(ctx), per = r.periodo || periodoHoy(ctx), pers = {}, hechos = {}, usos = {}, cuenta = {};
     pers[periodoHoy(ctx)] = 1;
     ctx.db.all('Clases').forEach(function (c) { pers[periodoDe(c.fecha, corte)] = 1; if (c.bancoId) usos[c.bancoId] = (usos[c.bancoId] || 0) + 1; });
-    ctx.db.all('Intentos').forEach(function (it) { if (it.fin) hechos[it.claseId] = (hechos[it.claseId] || 0) + 1; });
+    intentos(ctx).forEach(function (it) { if (it.fin) hechos[it.claseId] = (hechos[it.claseId] || 0) + 1; });
     ctx.db.all('Preguntas').forEach(function (q) { var c = cuenta[q.bancoId] || (cuenta[q.bancoId] = { n: 0, an: 0 }); if (si(q.anulada)) c.an++; else c.n++; });
     return { periodo: per, periodos: Object.keys(pers).sort().reverse(), corte: corte, hoy: ctx.hoy(), ahora: ctx.now(),
       cursos: ctx.db.all('Cursos').slice().sort(porNombre).map(function (c) {
@@ -559,8 +565,16 @@ var ACCIONES = {
     sesion(ctx, r, 'docente');
     var cl = uno(ctx, 'Clases', r.id);
     if (!cl || !cl.bancoId) throw E('Esa clase no tiene cuestionario.');
-    if (r.estado === 'abierto') { ctx.db.update('Clases', cl.id, { estado: 'abierto', modo: r.ausentes ? 'ausentes' : 'clase' }); return {}; }
-    ctx.db.all('Intentos').filter(function (it) { return it.claseId === cl.id && !it.fin; }).forEach(function (it) {
+    if (r.estado === 'abierto') {
+      var ya = {};
+      ctx.db.all('Intentos').forEach(function (it) { if (it.claseId === cl.id) ya[it.alumnoId] = 1; });
+      ctx.db.insertMany('Intentos', activos(ctx, cl.cursoId).filter(function (a) { return !ya[a.id]; }).map(function (a) {
+        return { id: idIntento(cl.id, a.id), claseId: cl.id, alumnoId: a.id, inicio: '', fin: '', orden: '', aciertos: 0, total: 0, enCasa: '', salidas: 0, device: '', resp: '' };
+      }));
+      ctx.db.update('Clases', cl.id, { estado: 'abierto', modo: r.ausentes ? 'ausentes' : 'clase' });
+      return {};
+    }
+    intentos(ctx).filter(function (it) { return it.claseId === cl.id && !it.fin; }).forEach(function (it) {
       var st = estado(ctx, cl.id, it.alumnoId);   // los que quedaron a medias se cierran con lo que respondieron
       cerrarIntento(ctx, st);
       guardarSt(ctx, st);
@@ -582,7 +596,7 @@ var ACCIONES = {
     sesion(ctx, r, 'docente');
     var it = uno(ctx, 'Intentos', r.id);
     if (!it) return {};
-    ctx.db.remove('Intentos', it.id);
+    ctx.db.update('Intentos', it.id, { inicio: '', fin: '', orden: '', aciertos: 0, total: 0, enCasa: '', salidas: 0, device: '', resp: '' });
     ctx.cache.remove('st:' + it.id);
     ctx.cache.remove('it:' + it.claseId + ':' + it.alumnoId);
     return {};
@@ -597,7 +611,7 @@ var ACCIONES = {
     if (!cu) throw E('Ese curso no existe.');
     var clases = ctx.db.all('Clases').filter(function (c) { return c.cursoId === cu.id && periodoDe(c.fecha, corte) === per && cuentaComoClase(c); })
       .sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
-    ctx.db.all('Intentos').forEach(function (it) { its[it.claseId + '|' + it.alumnoId] = it; });
+    intentos(ctx).forEach(function (it) { its[it.claseId + '|' + it.alumnoId] = it; });
     ctx.db.all('Marcas').forEach(function (m) { mar[m.id] = m.estado; });
     return { curso: cu.nombre, periodo: per,
       clases: clases.map(function (c) { return { id: c.id, titulo: c.titulo, fecha: c.fecha, sinCuestionario: !c.bancoId }; }),
@@ -643,7 +657,7 @@ function resultadosDe(ctx, r, detalle) {
   var cu = uno(ctx, 'Cursos', cl.cursoId), its = {}, ids = {}, devs = {}, nom = {};
   var alumnos = ctx.db.all('Alumnos').filter(function (a) { return a.cursoId === cl.cursoId; });
   alumnos.forEach(function (a) { nom[a.id] = a.nombre; });
-  ctx.db.all('Intentos').forEach(function (it) {
+  intentos(ctx).forEach(function (it) {
     if (it.claseId !== cl.id) return;
     its[it.alumnoId] = it; ids[it.id] = 1;
     if (it.device) (devs[it.device] || (devs[it.device] = [])).push(it.alumnoId);
@@ -703,7 +717,7 @@ function memCtx(data, cache) {
       all: function (t) { return data[t] || (data[t] = []); },
       insert: function (t, o) { ctx.db.all(t).push(fila(t, o)); },
       insertMany: function (t, os) { os.forEach(function (o) { ctx.db.all(t).push(fila(t, o)); }); },
-      update: function (t, id, p) { var r = uno(ctx, t, id); if (r) Object.keys(p).forEach(function (k) { r[k] = String(p[k]); }); },
+      update: function (t, id, p) { var r = uno(ctx, t, id); if (r) Object.keys(p).forEach(function (k) { r[k] = String(p[k]); }); return !!r; },
       remove: function (t, id) { data[t] = ctx.db.all(t).filter(function (r) { return r.id !== id; }); }
     }
   };

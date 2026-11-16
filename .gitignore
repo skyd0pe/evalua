@@ -1,2 +1,4 @@
 node_modules/
 test/capturas/
+test/demo.html
+test/demo.js

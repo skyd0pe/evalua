@@ -56,7 +56,7 @@ test('adaptador de Google: un cuestionario completo pasando por doPost', () => {
   let q = ok({ a: 'empezar', t: e.tk, claseId });
   while (!q.fin) q = ok({ a: 'responder', t: e.tk, claseId, pos: q.pos, di: q.opciones.indexOf('bien') });
   assert.strictEqual(q.puntos, 100);
-  const it = g.hojas.Intentos.v[1];
+  const it = g.hojas.Intentos.v.find(r => r[3] !== '' && r[0] !== 'id');   // el renglón del intento empezado (los otros son reservas)
   assert.ok(it[4] !== '' && it[6] === '5' && it[7] === '5', 'el intento quedó cerrado con 5 de 5 en su renglón');
   assert.strictEqual(Object.keys(JSON.parse(it[11])).length, 5, 'las 5 respuestas quedaron en el renglón del intento');
   assert.strictEqual(g.hojas.Respuestas, undefined, 'ya no hay pestaña Respuestas');
