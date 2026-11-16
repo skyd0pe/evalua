@@ -58,12 +58,17 @@ jobs:
             python3 - <<'PY'
           import json, os, sys
           p = os.path.expanduser('~/.clasprc.json')
+          crudo = open(p, encoding='utf-8', errors='replace').read().lstrip('\ufeff').strip()
           try:
-              d = json.load(open(p))
+              d = json.loads(crudo)
           except Exception as e:
-              print('::error::El secreto CLASPRC_JSON no es un JSON válido (' + type(e).__name__ + '). Volvé a copiar el archivo entero.')
+              # Pistas sin mostrar el contenido: largo, cómo empieza y termina, dónde falla.
+              print('::error::El secreto CLASPRC_JSON no es un JSON válido. Largo:', len(crudo),
+                    '| empieza con llave:', crudo[:1] == '{', '| termina con llave:', crudo[-1:] == '}',
+                    '| falla en:', getattr(e, 'pos', '?'), '| comillas raras:', any(c in crudo for c in '\u201c\u201d'))
               sys.exit(1)
           print('Campos de la credencial:', sorted(d.keys()))
+          json.dump(d, open(p, 'w'))
           if 'tokens' in d and 'token' not in d:
               t = d['tokens'].get('default') or next(iter(d['tokens'].values()))
               print('Formato de clasp 3; campos:', sorted(t.keys()))
