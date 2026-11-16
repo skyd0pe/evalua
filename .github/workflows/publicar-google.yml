@@ -84,6 +84,10 @@ jobs:
           try:
               d = leer(crudo)
           except Exception as e:
+              if crudo.startswith('http') and 'accounts.google.com' in crudo:
+                  print('::error::El secreto CLASPRC_JSON tiene la dirección de inicio de sesión de Google, no la credencial. '
+                        'Abrí esa dirección, autorizá, y después copiá el contenido del archivo .clasprc.json (empieza con una llave).')
+                  sys.exit(1)
               print('::error::Pistas: primer caracter:', tipo(crudo[:1]), '| último:', tipo(crudo[-1:]),
                     '| tiene llave en la posición:', crudo.find('{'), '| renglones:', crudo.count('\n') + 1,
                     '| tiene la palabra token:', 'token' in crudo, '| puntos:', crudo.count('.'),
