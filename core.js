@@ -15,6 +15,7 @@ var TABLAS = {
 };
 var H4 = 4 * 3600 * 1000;   // duración de un PIN
 var GRACIA = 8000;          // margen por la demora de la red: en Google cada pedido tarda 3 a 5 segundos
+var LECTURA = 5000;         // la pregunta se muestra sola, en grande, antes de las opciones
 var REINTENTO = 5000;       // un pedido repetido antes de este tiempo es un reintento, no una reconexión
 
 /* ---------- utilidades ---------- */
@@ -186,10 +187,15 @@ function estado(ctx, claseId, alumnoId) {   // de la memoria rápida o, si no es
   guardarSt(ctx, st);
   return st;
 }
-function vista(ctx, st) {   // lo único que viaja al teléfono: la pregunta y sus opciones, nunca la correcta
-  var par = st.orden[st.pos], q = pregDe(banco(ctx, st.bancoId), par[0]);
+/* Lo único que viaja al teléfono: la pregunta, sus opciones y el texto de la siguiente (nunca la correcta).
+   Con el texto de la siguiente, el teléfono la muestra en grande apenas el alumno responde, mientras la respuesta
+   viaja a Google: así la espera queda escondida en los segundos de lectura.
+   restante = lectura + segundos que le quedan, contando desde que el servidor la mandó. */
+function vista(ctx, st) {
+  var b = banco(ctx, st.bancoId), par = st.orden[st.pos], q = pregDe(b, par[0]), sig = st.orden[st.pos + 1];
   return { pos: st.pos, n: st.orden.length, texto: q.texto, opciones: par[1].map(function (i) { return q.ops[i]; }),
-    segundos: st.seg, restante: Math.max(0, st.seg * 1000 - (ctx.now() - st.enviada)) };
+    siguiente: sig ? pregDe(b, sig[0]).texto : '', lectura: LECTURA, segundos: st.seg,
+    restante: Math.max(0, LECTURA + st.seg * 1000 - (ctx.now() - st.enviada)) };
 }
 function resumen(st) { return { fin: true, aciertos: st.ok, total: st.total, puntos: puntos(st.ok, st.total) }; }
 function cerrarIntento(ctx, st) {
@@ -318,7 +324,7 @@ var ACCIONES = {
     if (st) {                                   // ya había empezado: reintento o reconexión
       if (st.fin) throw E('Ya rendiste este cuestionario.', 'hecho');
       // La pregunta que estaba en pantalla al cortarse cuenta como sin responder: así nadie gana tiempo saliendo y volviendo.
-      if (st.enviada && ctx.now() - st.enviada > REINTENTO) anotar(ctx, st, null, Math.min(ctx.now() - st.enviada, st.seg * 1000));
+      if (st.enviada && ctx.now() - st.enviada > REINTENTO) anotar(ctx, st, null, Math.max(0, Math.min(ctx.now() - st.enviada - LECTURA, st.seg * 1000)));
       if (st.fin) { guardarSt(ctx, st); return resumen(st); }
       if (!st.enviada) st.enviada = ctx.now();
       guardarSt(ctx, st);
@@ -355,7 +361,7 @@ var ACCIONES = {
     // El teléfono informa cuánto tardó (la red de Google suma varios segundos que no son del alumno).
     // El servidor pone el límite: entre que mandó la pregunta y recibió la respuesta no pueden pasar más de los segundos + GRACIA.
     var srv = st.enviada ? ctx.now() - st.enviada : 0, tope = st.seg * 1000, cli = r.ms === undefined || r.ms === '' ? srv : num(r.ms);
-    var tarde = srv > tope + GRACIA || cli > tope + 500, di = r.di, ops = st.orden[pos][1];
+    var tarde = srv > LECTURA + tope + GRACIA || cli > tope + 500, di = r.di, ops = st.orden[pos][1];
     var elegida = (di === null || di === undefined || di === '' || tarde || !(num(di) >= 0 && num(di) < ops.length)) ? null : ops[num(di)];
     anotar(ctx, st, elegida, Math.max(0, Math.min(cli, srv, tope)));
     if (!st.fin) st.enviada = ctx.now();

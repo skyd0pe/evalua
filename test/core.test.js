@@ -94,8 +94,13 @@ test('cuestionario: cerrado no se rinde; abierto manda preguntas sin la respuest
   assert.strictEqual(w.mal('empezar', { t: tk, claseId: w.clase.id }).code, 'cerrado');
   w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
   const q = w.ok('empezar', { t: tk, claseId: w.clase.id });
-  assert.deepStrictEqual(Object.keys(q).sort(), ['n', 'opciones', 'pos', 'restante', 'segundos', 'texto']);
+  assert.deepStrictEqual(Object.keys(q).sort(), ['lectura', 'n', 'opciones', 'pos', 'restante', 'segundos', 'siguiente', 'texto']);
   assert.strictEqual(q.n, 5); assert.strictEqual(q.opciones.length, 4);
+  assert.strictEqual(q.restante, 25000, '5 s de lectura + 20 s para responder');
+  assert.ok(q.siguiente.startsWith('Pregunta '), 'trae el texto de la siguiente');
+  w.ctx.t += 3000;
+  const q2 = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: 0, ms: 1000 });
+  assert.strictEqual(q2.texto, q.siguiente, 'la que viene es la que se anunció');
 });
 test('cuestionario: se guarda pregunta por pregunta y se corrige en el servidor', () => {
   const w = mundo(), tk = w.entra(0);
@@ -111,7 +116,7 @@ test('tiempo: el teléfono informa lo que tardó y el servidor pone un tope', ()
   w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
   let q = w.ok('empezar', { t: tk, claseId: w.clase.id });
   const bien = () => q.opciones.findIndex(o => o.startsWith('bien'));
-  w.ctx.t += 25000;                                    // 25 s en el servidor por la red, pero el alumno tardó 18
+  w.ctx.t += 30000;                                    // 30 s en el servidor (5 de lectura + red), pero el alumno tardó 18
   q = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 0, di: bien(), ms: 18000 });
   w.ctx.t += 5000;                                     // el teléfono dice 21 s: pasado de tiempo
   q = w.ok('responder', { t: tk, claseId: w.clase.id, pos: 1, di: bien(), ms: 21000 });

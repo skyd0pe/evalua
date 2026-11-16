@@ -130,6 +130,7 @@ function vAlumno() {
     var c = a.clase;
     return '<div class="stack"><h2>' + esc(c.titulo) + '</h2><div class="card"><p><b>' + c.n + ' preguntas</b>, con <b>' + c.segundos + ' segundos</b> para cada una.</p>' +
       '<p class="meta">Cuando tocás una respuesta pasás a la siguiente y no se puede volver atrás. Si se acaba el tiempo, la pregunta queda sin responder. ' +
+      'Cada pregunta aparece primero sola, en grande, durante 5 segundos para que la leas; después aparecen las opciones y empieza a correr el tiempo. ' +
       'Si salís o recargás, perdés la pregunta que tenías en pantalla.</p></div>' +
       '<button class="btn primary big" data-act="empezar" data-id="' + c.id + '">Empezar ahora</button><button class="btn" data-act="al-home">Todavía no</button></div>';
   }
@@ -156,26 +157,58 @@ function vAlumno() {
   return '';
 }
 
+/* ----- el cuestionario en pantalla -----
+   Cada pregunta tiene dos fases: "leer" (la pregunta sola, en grande, 5 segundos) y "opciones" (corre el reloj).
+   Al responder, si ya se conoce el texto de la siguiente, se muestra enseguida en fase "leer" mientras la respuesta
+   se guarda: la demora de Google queda escondida en la lectura. Las opciones aparecen cuando pasaron los 5 segundos
+   y además llegaron del servidor. */
+function cabeza(pos, n) {
+  return '<div class="row" style="justify-content:space-between"><span class="pill">Pregunta ' + (pos + 1) + ' de ' + n + '</span><span class="meta">' + esc(S.al.nombre) + '</span></div>';
+}
 function vRun() {
-  var a = S.al, q = a.q;
-  return '<div class="stack"><div class="row" style="justify-content:space-between"><span class="pill">Pregunta ' + (q.pos + 1) + ' de ' + q.n + '</span><span class="meta">' + esc(a.nombre) + '</span></div>' +
-    '<div class="timer" id="timer" data-level="ok" role="timer" aria-label="Segundos restantes"><div class="tr"><i id="tbar"></i></div><span class="num" id="tnum">' + Math.ceil(q.restante / 1000) + '</span></div>' +
+  var a = S.al, r = a.run;
+  if (r.fase === 'leer') return '<div class="stack leer">' + cabeza(r.pos, r.n) + '<p class="qbig">' + esc(r.texto) + '</p>' +
+    '<div class="leerbar"><i id="lbar"></i></div><p class="meta" id="lmsg" aria-live="polite">Leé con calma: las opciones aparecen en <b id="lnum">' + Math.ceil(r.lectura / 1000) + '</b> segundos.</p>' +
+    '<div id="run-msg" class="meta" aria-live="polite"></div></div>';
+  if (r.fase === 'guardando') return '<div class="stack">' + cabeza(r.pos, r.n) + '<p class="empty">Guardando tu última respuesta…</p><div id="run-msg" class="meta" aria-live="polite"></div></div>';
+  var q = r.q;
+  return '<div class="stack">' + cabeza(q.pos, q.n) +
+    '<div class="timer" id="timer" data-level="ok" role="timer" aria-label="Segundos restantes"><div class="tr"><i id="tbar"></i></div><span class="num" id="tnum">' + Math.ceil(r.ms / 1000) + '</span></div>' +
     '<p class="qtext">' + esc(q.texto) + '</p><div class="choices">' + q.opciones.map(function (o, i) {
       return '<button class="choice" data-act="responder" data-di="' + i + '" aria-pressed="false"><span class="k">' + 'ABCDEFGHI'[i] + '</span><span>' + esc(o) + '</span></button>';
     }).join('') + '</div><div id="run-msg" class="meta" aria-live="polite"></div></div>';
 }
+function correrReloj() { if (!timer) timer = setInterval(tick, 100); tick(); }
+function terminar(res) { clearInterval(timer); timer = null; S.al.res = res; S.al.run = null; S.al.v = 'fin'; render(); }
+/* Una pregunta que llega del servidor (al empezar o al volver a entrar). */
 function ponerPregunta(q) {
   var a = S.al;
-  if (q.fin) { clearInterval(timer); timer = null; a.res = q; a.v = 'fin'; render(); return; }
-  a.q = q; a.v = 'run'; a.bloq = false; a.desde = performance.now(); a.lim = a.desde + q.restante;   // performance.now no depende de la hora del teléfono
-  render();
-  if (!timer) timer = setInterval(tick, 100);
-  tick();
+  if (q.fin) return terminar(q);
+  var seg = q.segundos * 1000, lect = Math.max(0, Math.min(q.lectura || 0, q.restante - seg));
+  a.v = 'run';
+  a.run = { pos: q.pos, n: q.n, texto: q.texto, q: q, fase: 'leer', lectura: lect, leerHasta: performance.now() + lect, ms: Math.min(seg, q.restante) };
+  render(); correrReloj();
+}
+function mostrarOpciones() {
+  var r = S.al.run;
+  r.fase = 'opciones'; r.bloq = false; r.desde = performance.now(); r.lim = r.desde + r.ms;   // performance.now no depende de la hora del teléfono
+  r.base = r.q.segundos * 1000 - r.ms;                                                    // lo que ya había pasado si volvió a entrar
+  render(); tick();
 }
 function tick() {
-  var a = S.al;
-  if (S.rol !== 'alumno' || a.v !== 'run' || a.bloq) return;
-  var rem = a.lim - performance.now(), tot = a.q.segundos * 1000, bar = $('tbar');
+  var a = S.al, r = a.run;
+  if (S.rol !== 'alumno' || a.v !== 'run' || !r) return;
+  var ahora = performance.now();
+  if (r.fase === 'leer') {
+    var falta = r.leerHasta - ahora, lb = $('lbar');
+    if (lb) { lb.style.transform = 'scaleX(' + Math.max(0, Math.min(1, 1 - falta / Math.max(1, r.lectura))) + ')'; }
+    if (falta > 0) { if ($('lnum')) $('lnum').textContent = Math.ceil(falta / 1000); return; }
+    if (r.q && r.q.pos === r.pos) { mostrarOpciones(); return; }
+    if ($('lmsg') && !r.esperando) { r.esperando = true; $('lmsg').textContent = 'Cargando las opciones…'; }
+    return;
+  }
+  if (r.fase !== 'opciones' || r.bloq) return;
+  var rem = r.lim - ahora, tot = r.q.segundos * 1000, bar = $('tbar');
   if (bar) {
     var p = Math.max(0, Math.min(1, rem / tot)), s = Math.ceil(Math.max(0, rem) / 1000);
     bar.style.transform = 'scaleX(' + p + ')';
@@ -185,17 +218,28 @@ function tick() {
   if (rem <= 0) responder(null);
 }
 function responder(di) {
-  var a = S.al;
-  if (a.bloq) return;
-  a.bloq = true;
-  a.pend = { claseId: a.claseId, pos: a.q.pos, di: di, ms: Math.round(performance.now() - a.desde) + (a.q.segundos * 1000 - a.q.restante) };
-  document.querySelectorAll('.choice').forEach(function (b, i) { b.disabled = true; if (i === di) b.setAttribute('aria-pressed', 'true'); });
+  var a = S.al, r = a.run;
+  if (!r || r.fase !== 'opciones' || r.bloq) return;
+  r.bloq = true;
+  var q = r.q;
+  a.pend = { claseId: a.claseId, pos: q.pos, di: di, ms: Math.round(performance.now() - r.desde) + r.base };
+  if (q.siguiente) {   // pasa ya a leer la siguiente; la respuesta se guarda mientras tanto
+    a.run = { pos: q.pos + 1, n: q.n, texto: q.siguiente, q: null, fase: 'leer', lectura: q.lectura || 0,
+      leerHasta: performance.now() + (q.lectura || 0), ms: q.segundos * 1000 };
+  } else a.run = { pos: q.pos, n: q.n, fase: 'guardando' };
+  render();
   mandarRespuesta();
 }
 function mandarRespuesta() {
   var a = S.al, m = $('run-msg');
-  if (m) m.textContent = a.pend.di === null ? 'Se acabó el tiempo. Guardando…' : 'Guardando…';
-  return call('responder', a.pend).then(ponerPregunta, function (e) {
+  if (m) m.textContent = '';
+  return call('responder', a.pend).then(function (q) {
+    var r = a.run;
+    if (!r) return;
+    if (q.fin) return terminar(q);
+    if (r.fase === 'leer' && r.pos === q.pos) { r.q = q; return; }   // llegaron las opciones de la que está leyendo
+    ponerPregunta(q);                                                   // el servidor dice otra cosa (por ejemplo, perdió la pregunta): manda él
+  }, function (e) {
     if (e.code) return fallo(e);
     var m2 = $('run-msg');
     if (m2) m2.innerHTML = '<p class="msg err">No se pudo guardar tu respuesta. No cierres esta pantalla.</p><button class="btn primary" data-act="reintentar">Reintentar</button>';
@@ -473,7 +517,7 @@ setInterval(sondear, 5000);
 
 /* ================= marco y eventos ================= */
 function render() {
-  if (S.rol === 'alumno' && S.al.v === 'run') { app.innerHTML = vRun(); return; }
+  if (S.rol === 'alumno' && S.al.v === 'run' && S.al.run) { app.innerHTML = vRun(); return; }
   var h = '<header class="top"><div class="brand"><h1>Repaso Relámpago</h1>' + (DEMO ? '<span class="pill warn">Demostración</span>' : '') + '</div>' +
     '<div class="seg" role="group" aria-label="Vista">' + [['alumno', 'Alumno'], ['docente', 'Docente']].map(function (r) {
       return '<button data-act="rol" data-v="' + r[0] + '" aria-pressed="' + (S.rol === r[0]) + '">' + r[1] + '</button>'; }).join('') + '</div></header>';

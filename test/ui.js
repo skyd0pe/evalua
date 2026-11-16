@@ -38,10 +38,18 @@ const path = require('path');
   await al.click('.list-btn >> text=Camila Sosa'); await esperar(al);
   ver(await al.isVisible('text=Hola, Camila'), 'entra a su inicio');
   await foto(al, '06-al-inicio'); await ancho(al, 'inicio alumno');
-  await al.click('text=Empezar'); await esperar(al); await al.click('text=Empezar ahora'); await esperar(al);
+  await al.click('text=Empezar'); await esperar(al);
+  ver(await al.isVisible('text=durante 5 segundos'), 'la introducción avisa de los 5 segundos de lectura');
+  await al.click('text=Empezar ahora'); await esperar(al);
+  ver(await al.isVisible('.qbig') && !(await al.isVisible('.choice')), 'primero se ve la pregunta sola, en grande');
+  await foto(al, '07a-al-lectura'); await ancho(al, 'lectura');
+  const t0 = Date.now(); await al.waitForSelector('.choice', { timeout: 9000 }); const espera = Date.now() - t0;
+  ver(espera > 3800 && espera < 7000, 'las opciones aparecen a los 5 segundos: ' + espera + ' ms');
   await foto(al, '07-al-pregunta'); await ancho(al, 'pregunta');
-  ver(await al.evaluate(() => typeof S.al.q.correcta === 'undefined' && !JSON.stringify(S.al.q).includes('correct')), 'la pregunta llega sin la respuesta correcta');
-  await al.click('.choice >> nth=0'); await esperar(al);
+  ver(await al.evaluate(() => !JSON.stringify(S.al.run.q).includes('correct') && !!S.al.run.q.siguiente), 'llega sin la respuesta correcta y con el texto de la siguiente');
+  const sig = await al.evaluate(() => S.al.run.q.siguiente);
+  await al.click('.choice >> nth=0'); await al.waitForTimeout(150);
+  ver(await al.isVisible('.qbig') && (await al.textContent('.qbig')) === sig, 'al responder, la siguiente aparece enseguida para leer');
   const pos1 = await al.textContent('.pill');
   await al.waitForTimeout(6000);                               // más que un reintento: salir y volver cuesta la pregunta en pantalla
   await al.reload(); await esperar(al);
@@ -52,7 +60,8 @@ const path = require('path');
   await doc.click('.tab >> text=Clases'); await doc.waitForTimeout(600);
   ver(await doc.isVisible('.chip.home >> text=Camila Sosa (rindiendo)'), 'el control en vivo la muestra rindiendo');
   await foto(doc, '08-vivo');
-  for (let i = 0; i < 3; i++) { await al.waitForSelector('.choice:not([disabled])'); await al.click('.choice >> nth=1'); await esperar(al); }
+  for (let i = 0; i < 3; i++) { await al.waitForSelector('.choice:not([disabled])', { timeout: 9000 }); await al.click('.choice >> nth=1'); await esperar(al); }
+  await al.waitForSelector('text=puntos', { timeout: 9000 });
   ver(await al.isVisible('text=puntos'), 'termina y ve su puntaje');
   ver(await al.isVisible('text=se habilita cuando tu profe cierre'), 'no ve la corrección mientras está abierto');
   await foto(al, '09-al-fin');
