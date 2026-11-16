@@ -59,9 +59,33 @@ jobs:
           import json, os, sys
           p = os.path.expanduser('~/.clasprc.json')
           crudo = open(p, encoding='utf-8', errors='replace').read().lstrip('\ufeff').strip()
+          def leer(txt):
+              try:
+                  return json.loads(txt)
+              except Exception:
+                  pass
+              # Si vino con texto alrededor (por ejemplo, copiado de la terminal), usar lo que está entre llaves.
+              a, b = txt.find('{'), txt.rfind('}')
+              if a >= 0 and b > a:
+                  try:
+                      return json.loads(txt[a:b + 1])
+                  except Exception:
+                      pass
+              # Si vino en base64.
+              import base64
+              try:
+                  return json.loads(base64.b64decode(txt).decode('utf-8-sig'))
+              except Exception:
+                  pass
+              return json.loads(txt)
+          def tipo(c):
+              return 'nada' if not c else 'letra' if c.isalpha() else 'número' if c.isdigit() else 'espacio' if c.isspace() else 'signo ' + ('comilla' if c in '"\'' else 'otro')
           try:
-              d = json.loads(crudo)
+              d = leer(crudo)
           except Exception as e:
+              print('::error::Pistas: primer caracter:', tipo(crudo[:1]), '| último:', tipo(crudo[-1:]),
+                    '| tiene llave en la posición:', crudo.find('{'), '| renglones:', crudo.count('\n') + 1,
+                    '| tiene la palabra token:', 'token' in crudo)
               # Pistas sin mostrar el contenido: largo, cómo empieza y termina, dónde falla.
               print('::error::El secreto CLASPRC_JSON no es un JSON válido. Largo:', len(crudo),
                     '| empieza con llave:', crudo[:1] == '{', '| termina con llave:', crudo[-1:] == '}',
