@@ -23,7 +23,7 @@ Los datos (alumnos, preguntas con su respuesta correcta, respuestas, contraseña
 5. Copiar la dirección que termina en `/exec` y pegarla en `API_URL`, al principio de `index.html`.
 6. En GitHub: **Settings > Pages**, publicar la rama `main`.
 
-Cada vez que cambie `core.js` o `Code.gs` hay que volver a pegarlos y crear una versión nueva de la implementación. Los cambios de `index.html` y `app.js` se publican solos al subirlos.
+Cada vez que cambie `core.js` o `Code.gs` hay que volver a pegarlos y publicar una versión nueva en **Implementar > Administrar las implementaciones > editar > Nueva versión** (así la dirección no cambia). Los cambios de `index.html` y `app.js` se publican solos al subirlos.
 
 ## Pruebas
 
