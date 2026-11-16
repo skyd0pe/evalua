@@ -33,7 +33,7 @@ Para activarla, una sola vez:
 
 1. En [script.google.com/home/usersettings](https://script.google.com/home/usersettings), activar **API de Google Apps Script**.
 2. En la PC (con [Node.js](https://nodejs.org) instalado), abrir una terminal y correr `npx @google/clasp@2.4.2 login`. Se abre Google: elegir la cuenta dueña de la planilla y tocar **Permitir**. Queda creado el archivo `.clasprc.json` en la carpeta del usuario (en Windows, `%USERPROFILE%\.clasprc.json`).
-3. En GitHub: **Settings > Secrets and variables > Actions > New repository secret**. Nombre: `CLASPRC_JSON`. Valor: todo el contenido de ese archivo. Después, borrar el archivo de la PC.
+3. En GitHub: **Settings > Secrets and variables > Actions > New repository secret**. Nombre: `CLASPRC_JSON`. Valor: todo el contenido de ese archivo (abrirlo con `notepad %USERPROFILE%\.clasprc.json`; empieza con `{` y termina con `}`). No sirve la dirección `https://accounts.google.com/...` que muestra la terminal: esa es solo para autorizar. Después, borrar el archivo de la PC.
 4. Para probarla: pestaña **Actions > Publicar en Google > Run workflow**.
 
 El secreto da acceso a los proyectos de Apps Script y a parte del Drive de esa cuenta. GitHub lo guarda cifrado y no lo pasa a cambios propuestos por otras personas. Para cortarlo: [myaccount.google.com/connections](https://myaccount.google.com/connections), quitar el acceso de clasp, y borrar el secreto en GitHub.
