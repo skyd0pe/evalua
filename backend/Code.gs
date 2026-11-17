@@ -153,8 +153,8 @@ function hojasDb_(cache) {
 function onEdit(e) {
   try {
     var t = e && e.range ? e.range.getSheet().getName() : '';
-    if (EN_MEMORIA.indexOf(t) >= 0) CacheService.getScriptCache().remove('ver:' + t);
-  } catch (err) {}
+    if (EN_MEMORIA.indexOf(t) >= 0) { CacheService.getScriptCache().remove('ver:' + t); console.log('Copia de ' + t + ' renovada.'); }
+  } catch (err) { console.error('onEdit no pudo renovar la copia: ' + err); }
 }
 
 function contexto_() {
