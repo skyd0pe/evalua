@@ -319,3 +319,24 @@ test('carga: 35 alumnos rindiendo intercalados, sin intentos duplicados ni respu
   const ordenes = new Set(empezados(ctx).map(i => JSON.parse(i.orden).map(x => x[0]).sort().join()));
   assert.ok(ordenes.size > 25, 'casi todos deberían recibir un juego distinto de preguntas: ' + ordenes.size);
 });
+
+test('lote: varios pedidos en una llamada, con la sesión que entrega el login y cortando en el primer error', () => {
+  const w = mundo();
+  const r = api(w.ctx, { a: 'lote', pasos: [{ a: 'login', clave: 'secreta-larga' }, { a: 'panel' }] });
+  assert.ok(r.ok);
+  assert.ok(r.d[0].ok && r.d[1].ok, 'el panel usa la sesión recién creada');
+  assert.strictEqual(r.d[1].d.cursos.length, 1);
+  const pin = w.doc('panel').cursos[0].pin;
+  const e = api(w.ctx, { a: 'lote', device: 'telX', pasos: [{ a: 'entrar', cursoId: w.curso.id, pin }, { a: 'soy', alumnoId: w.curso.alumnos[0].id }, { a: 'inicio' }] });
+  assert.ok(e.d.every(x => x.ok), JSON.stringify(e.d.map(x => x.error)));
+  assert.strictEqual(e.d[2].d.alumno, 'Ana Díaz');
+  const m = api(w.ctx, { a: 'lote', t: w.t, pasos: [{ a: 'clase.estado', id: 'no-existe', estado: 'abierto' }, { a: 'panel' }] });
+  assert.strictEqual(m.d.length, 1, 'después de un error no sigue');
+  assert.ok(!m.d[0].ok);
+  const sin = api(w.ctx, { a: 'lote', pasos: [{ a: 'panel' }] });
+  assert.ok(!sin.d[0].ok, 'sin sesión no hay panel');
+  const anidado = api(w.ctx, { a: 'lote', t: w.t, pasos: [{ a: 'lote', pasos: [] }] });
+  assert.ok(!anidado.d[0].ok);
+  const largo = api(w.ctx, { a: 'lote', t: w.t, pasos: Array.from({ length: 20 }, () => ({ a: 'panel' })) });
+  assert.strictEqual(largo.d.length, 6);
+});

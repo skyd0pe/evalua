@@ -685,7 +685,25 @@ function resultadosDe(ctx, r, detalle) {
 }
 
 /* Puerta de entrada: recibe {a: acción, t: sesión, ...} y devuelve {ok, d} o {ok:false, error}. */
+/* Varios pedidos en una sola llamada (cada llamada a Google cuesta 1 a 2 segundos solo de ida y vuelta).
+   Se hacen en orden, con la misma sesión; si uno falla, los siguientes no se hacen. Si un paso entrega una sesión nueva
+   (login, entrar), los siguientes la usan. */
+var MAX_LOTE = 6;
 function api(ctx, req) {
+  if (req && req.a === 'lote') {
+    var pasos = Array.isArray(req.pasos) ? req.pasos.slice(0, MAX_LOTE) : [], out = [], t = req.t;
+    for (var i = 0; i < pasos.length; i++) {
+      var p = pasos[i] && typeof pasos[i] === 'object' ? pasos[i] : {};
+      if (p.a === 'lote') { out.push({ ok: false, error: 'Pedido desconocido.' }); break; }
+      var q = {}; Object.keys(p).forEach(function (k) { q[k] = p[k]; });
+      q.t = t; q.device = req.device;
+      var r = api(ctx, q);
+      out.push(r);
+      if (!r.ok) break;
+      if (r.d && typeof r.d.tk === 'string') t = r.d.tk;
+    }
+    return { ok: true, d: out };
+  }
   try {
     var f = ACCIONES[req && req.a];
     if (!f) throw E('Pedido desconocido.');
@@ -723,4 +741,4 @@ function memCtx(data, cache) {
   return ctx;
 }
 
-if (typeof module !== 'undefined') module.exports = { api: api, parseBlock: parseBlock, memCtx: memCtx, celda: celda, puntos: puntos, periodoDe: periodoDe, TABLAS: TABLAS, H4: H4 };
+if (typeof module !== 'undefined') module.exports = { MAX_LOTE: MAX_LOTE, api: api, parseBlock: parseBlock, memCtx: memCtx, celda: celda, puntos: puntos, periodoDe: periodoDe, TABLAS: TABLAS, H4: H4 };

@@ -60,6 +60,11 @@ function call(a, d, callado) {
     var e = new Error(res.error || 'Algo salió mal.'); e.code = res.code; throw e;
   }, function (e) { fin(); throw e; });
 }
+/* Varios pedidos en una sola llamada. Devuelve las respuestas tal cual ({ok, d} o {ok:false, error}). */
+function lote(pasos, callado) { return call('lote', { pasos: pasos }, callado); }
+function dato(r) { if (r && r.ok) return r.d; var e = new Error((r && r.error) || 'Algo salió mal.'); e.code = r && r.code; throw e; }
+/* Un pedido seguido de otros que traen lo que hay que mostrar después; si el primero falla, se ve su error. */
+function todo(pasos, callado) { return lote(pasos, callado).then(function (rs) { return rs.map(dato); }); }
 function fallo(e) {
   if (e.code === 'ses') {
     if (S.rol === 'docente') { S.doc.tk = null; guardado('ev-doc', null, sessionStorage); }
@@ -73,13 +78,24 @@ function fallo(e) {
 
 /* ================= ALUMNO ================= */
 function recordar() { var a = S.al; guardado('ev-al', { tk: a.tk, cursoId: a.cursoId, cursoNombre: a.cursoNombre, alumnoId: a.alumnoId, nombre: a.nombre }); }
-function irCursos() { S.al = { v: 'cargando' }; guardado('ev-al', null); render(); return call('cursos').then(function (d) { S.al.cursos = d; S.al.v = 'cursos'; render(); }); }
-function irHome() { return call('inicio').then(function (d) { S.al.home = d; S.al.nombre = d.alumno; S.al.v = 'home'; recordar(); render(); }); }
+function irCursos() {
+  var antes = guardado('ev-cursos');                     // la lista de la vez anterior aparece al instante y se actualiza atrás
+  S.al = antes ? { v: 'cursos', cursos: antes } : { v: 'cargando' }; guardado('ev-al', null); render();
+  return call('cursos', null, !!antes).then(function (d) {
+    guardado('ev-cursos', d);
+    if (S.al.v === 'cursos' || S.al.v === 'cargando') { S.al.cursos = d; S.al.v = 'cursos'; render(); }
+  }, function (e) { if (!antes) throw e; });
+}
+function ponerHome(d) { S.al.home = d; S.al.nombre = d.alumno; S.al.v = 'home'; recordar(); render(); }
+function irHome() { return call('inicio').then(ponerHome); }
 function entrar(pin) {
   var a = S.al;
-  return call('entrar', { cursoId: a.cursoId, pin: pin, alumnoId: a.alumnoId || '' }).then(function (d) {
+  var pasos = [{ a: 'entrar', cursoId: a.cursoId, pin: pin, alumnoId: a.alumnoId || '' }];
+  if (a.alumnoId) pasos.push({ a: 'inicio' });           // si ya sabemos quién es, la pantalla de inicio viene en la misma llamada
+  return lote(pasos).then(function (rs) {
+    var d = dato(rs[0]);
     a.tk = d.tk; a.alumnos = d.alumnos; a.cursoNombre = d.curso;
-    if (d.alumnoId) { recordar(); return irHome(); }
+    if (d.alumnoId) { recordar(); return rs[1] && rs[1].ok ? ponerHome(rs[1].d) : irHome(); }
     a.alumnoId = ''; a.nombre = ''; a.v = 'nombre'; render();
   });
 }
@@ -269,15 +285,19 @@ function vTabla(t, alcance, esAlumno) {
 }
 
 /* ================= DOCENTE ================= */
-function recargar() { return call('panel', { periodo: S.doc.per || '' }).then(function (d) { S.doc.p = d; S.doc.per = d.periodo; S.doc.cargado = Date.now(); render(); sondear(); }); }
-function hacer(a, d, msg) { return call(a, d).then(function () { S.confirm = null; if (msg) aviso(msg); return recargar(); }); }
+function pPanel() { return { a: 'panel', periodo: S.doc.per || '' }; }
+function ponerPanel(d) { S.doc.p = d; S.doc.per = d.periodo; S.doc.cargado = Date.now(); render(); sondear(); }
+function recargar() { return call('panel', { periodo: S.doc.per || '' }).then(ponerPanel); }
+/* Hace algo y trae el panel actualizado en la misma llamada. */
+function hacer(a, d, msg) { return todo([Object.assign({ a: a }, d || {}), pPanel()]).then(function (r) { S.confirm = null; if (msg) aviso(msg); ponerPanel(r[1]); }); }
 function cursoDe(id) { return S.doc.p.cursos.filter(function (c) { return c.id === id; })[0]; }
 function claseDe(id) { return S.doc.p.clases.filter(function (c) { return c.id === id; })[0]; }
 function conCuestionario() { return S.doc.p.clases.filter(function (c) { return c.bancoId && c.estado !== 'nuevo'; }).sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; }); }
 function cargarRes() { var d = S.doc, l = conCuestionario(); if (!claseDe(d.resId) || !claseDe(d.resId).bancoId) d.resId = l.length ? l[0].id : null; d.res = null; if (!d.resId) return Promise.resolve(); return call('resultados', { claseId: d.resId }).then(function (r) { d.res = r; render(); }); }
 function cargarAsis() { var d = S.doc; if (!cursoDe(d.asisCurso)) d.asisCurso = d.p.cursos.length ? d.p.cursos[0].id : null; d.asis = null; if (!d.asisCurso) return Promise.resolve(); return call('asistencia', { cursoId: d.asisCurso, periodo: d.per }).then(function (r) { d.asis = r; render(); }); }
 function cargarTabla() { var d = S.doc; if (!cursoDe(d.tablaCurso)) d.tablaCurso = d.p.cursos.length ? d.p.cursos[0].id : null; d.tabla = null; if (!d.tablaCurso) return Promise.resolve(); return call('tabla', { cursoId: d.tablaCurso, periodo: d.per }).then(function (r) { d.tabla = r; render(); }); }
-function cargarBanco(id) { return call('banco.ver', { id: id }).then(function (b) { S.doc.banco = b; S.doc.edq = null; render(); }); }
+function ponerBanco(b) { S.doc.banco = b; S.doc.edq = null; render(); }
+function cargarBanco(id) { return call('banco.ver', { id: id }).then(ponerBanco); }
 function cargarTab() { var t = S.doc.tab; return t === 'resultados' ? cargarRes() : t === 'asistencia' ? cargarAsis() : t === 'tabla' ? cargarTabla() : Promise.resolve(); }
 
 function vDocente() {
@@ -541,7 +561,7 @@ var A = {
   /* alumno */
   'elegir-curso': function (d) { S.al.cursoId = d.id; S.al.cursoNombre = d.n; S.al.v = 'pin'; render(); var p = $('pin'); if (p) p.focus(); },
   'otro-curso': function () { return irCursos(); },
-  'elegir-alumno': function (d) { return call('soy', { alumnoId: d.id }).then(function () { S.al.alumnoId = d.id; S.al.nombre = d.n; recordar(); return irHome(); }); },
+  'elegir-alumno': function (d) { return todo([{ a: 'soy', alumnoId: d.id }, { a: 'inicio' }]).then(function (r) { S.al.alumnoId = d.id; S.al.nombre = d.n; ponerHome(r[1]); }); },
   'al-home': function () { return irHome(); },
   'al-tabla': function () { return call('tabla').then(function (t) { S.al.tabla = t; S.al.alcance = 'curso'; S.al.v = 'tabla'; render(); }); },
   alcance: function (d) { if (S.rol === 'docente') S.doc.alcance = d.v; else S.al.alcance = d.v; render(); },
@@ -564,10 +584,13 @@ var A = {
   'banco-ver': function (d) { return cargarBanco(d.id); },
   'banco-borrar': function (d) { return hacer('banco.borrar', { id: d.id }, 'Tema eliminado.'); },
   'preg-editar': function (d) { S.doc.edq = d.id || null; render(); var t = $('fp-texto'); if (t) $('prev-q').innerHTML = previa(t.value, true); },
-  'preg-anular': function (d) { return call('pregunta.anular', { id: d.id, anulada: !!d.v }).then(function () { aviso(d.v ? 'Pregunta anulada. Notas recalculadas.' : 'La pregunta vuelve a contar.'); return cargarBanco(S.doc.banco.id); }).then(recargarCallado); },
-  'intento-reiniciar': function (d) { return call('intento.reiniciar', { id: d.id }).then(function () { S.confirm = null; aviso('Intento reiniciado.'); return recargar(); }).then(cargarRes); },
-  marca: function (d) { return call('marca', { claseId: d.c, alumnoId: d.a, estado: SIGUE[d.k] }).then(cargarAsis); },
-  'marca-todos': function (d) { return call('marca.todos', { claseId: d.id }).then(cargarAsis); },
+  'preg-anular': function (d) { return todo([{ a: 'pregunta.anular', id: d.id, anulada: !!d.v }, { a: 'banco.ver', id: S.doc.banco.id }, pPanel()]).then(function (r) { aviso(d.v ? 'Pregunta anulada. Notas recalculadas.' : 'La pregunta vuelve a contar.'); S.doc.p = r[2]; S.doc.cargado = Date.now(); ponerBanco(r[1]); }); },
+  'intento-reiniciar': function (d) {
+    var x = S.doc;
+    return todo([{ a: 'intento.reiniciar', id: d.id }, pPanel(), { a: 'resultados', claseId: x.resId }]).then(function (r) { S.confirm = null; aviso('Intento reiniciado.'); x.res = r[2]; ponerPanel(r[1]); });
+  },
+  marca: function (d) { var x = S.doc; return todo([{ a: 'marca', claseId: d.c, alumnoId: d.a, estado: SIGUE[d.k] }, { a: 'asistencia', cursoId: x.asisCurso, periodo: x.per }]).then(function (r) { x.asis = r[1]; render(); }); },
+  'marca-todos': function (d) { var x = S.doc; return todo([{ a: 'marca.todos', claseId: d.id }, { a: 'asistencia', cursoId: x.asisCurso, periodo: x.per }]).then(function (r) { x.asis = r[1]; render(); }); },
   'copiar-asis': function () {
     var tsv = asisTSV(S.doc.asis), listo = function (ok) {
       var m = $('copy-msg'); if (!m) return;
@@ -584,21 +607,20 @@ var A = {
   'alumno-editar': function (d) { S.doc.eda = d.id || null; render(); var i = $('a-nombre'); if (i) i.focus(); },
   'alumno-baja': function (d) { return hacer('alumno.guardar', { id: d.id, baja: true }, 'Alumno dado de baja.'); }
 };
-function recargarCallado() { return call('panel', { periodo: S.doc.per || '' }).then(function (d) { S.doc.p = d; S.doc.cargado = Date.now(); }); }
 
 var F = {   // formularios
   'f-pin': function () { var pin = val('pin').trim(); if (!/^\d{4}$/.test(pin)) { aviso('El PIN son 4 números.', 'err'); return; } return entrar(pin); },
-  'f-login': function () { return call('login', { clave: val('clave') }).then(function (d) { S.doc.tk = d.tk; guardado('ev-doc', d.tk, sessionStorage); return recargar(); }); },
+  'f-login': function () { return todo([{ a: 'login', clave: val('clave') }, pPanel()]).then(function (r) { S.doc.tk = r[0].tk; guardado('ev-doc', r[0].tk, sessionStorage); ponerPanel(r[1]); }); },
   'f-clase': function () {
     var f = S.doc.fc, cursos = [];
     document.querySelectorAll('input[name="fc-curso"]:checked').forEach(function (c) { cursos.push(c.value); });
-    return call('clase.guardar', { id: f.id || '', bancoId: val('fc-banco'), titulo: val('fc-titulo'), cursoIds: cursos, fecha: val('fc-fecha'), segundos: val('fc-seg'), porAlumno: f.por })
-      .then(function () { S.doc.fc = null; aviso(f.id ? 'Clase guardada.' : cursos.length > 1 ? 'Se crearon ' + cursos.length + ' clases.' : 'Clase creada. Abrila cuando empiece.'); return recargar(); });
+    return todo([{ a: 'clase.guardar', id: f.id || '', bancoId: val('fc-banco'), titulo: val('fc-titulo'), cursoIds: cursos, fecha: val('fc-fecha'), segundos: val('fc-seg'), porAlumno: f.por }, pPanel()])
+      .then(function (r) { S.doc.fc = null; aviso(f.id ? 'Clase guardada.' : cursos.length > 1 ? 'Se crearon ' + cursos.length + ' clases.' : 'Clase creada. Abrila cuando empiece.'); ponerPanel(r[1]); });
   },
-  'f-banco': function () { return call('banco.guardar', { titulo: val('fb-titulo'), texto: val('fb-texto') }).then(function () { S.doc.fb = null; aviso('Preguntas guardadas.'); return recargar(); }); },
-  'f-mas': function () { var b = S.doc.banco; return call('banco.guardar', { id: b.id, titulo: val('fm-titulo'), texto: val('fm-texto') }).then(function () { aviso('Guardado.'); return cargarBanco(b.id); }).then(recargarCallado); },
-  'f-preg': function () { return call('pregunta.guardar', { id: S.doc.edq, texto: val('fp-texto') }).then(function () { aviso('Pregunta corregida. Notas recalculadas.'); return cargarBanco(S.doc.banco.id); }); },
-  'f-curso': function () { return call('curso.guardar', { nombre: val('c-nombre'), alumnos: val('c-alumnos') }).then(function () { S.doc.cf = null; aviso('Curso guardado.'); return recargar(); }); },
+  'f-banco': function () { return todo([{ a: 'banco.guardar', titulo: val('fb-titulo'), texto: val('fb-texto') }, pPanel()]).then(function (r) { S.doc.fb = null; aviso('Preguntas guardadas.'); ponerPanel(r[1]); }); },
+  'f-mas': function () { var b = S.doc.banco; return todo([{ a: 'banco.guardar', id: b.id, titulo: val('fm-titulo'), texto: val('fm-texto') }, { a: 'banco.ver', id: b.id }, pPanel()]).then(function (r) { aviso('Guardado.'); S.doc.p = r[2]; S.doc.cargado = Date.now(); ponerBanco(r[1]); }); },
+  'f-preg': function () { return todo([{ a: 'pregunta.guardar', id: S.doc.edq, texto: val('fp-texto') }, { a: 'banco.ver', id: S.doc.banco.id }]).then(function (r) { aviso('Pregunta corregida. Notas recalculadas.'); ponerBanco(r[1]); }); },
+  'f-curso': function () { return todo([{ a: 'curso.guardar', nombre: val('c-nombre'), alumnos: val('c-alumnos') }, pPanel()]).then(function (r) { S.doc.cf = null; aviso('Curso guardado.'); ponerPanel(r[1]); }); },
   'f-alumno': function () { return hacer('alumno.guardar', { id: S.doc.eda, nombre: val('a-nombre') }, 'Nombre corregido.').then(function () { S.doc.eda = null; render(); }); },
   'f-mas-al': function () { var c = cursoDe(S.doc.cursoAbierto); if (!val('m-alumnos').trim()) { aviso('Escribí al menos un nombre.', 'err'); return; } return hacer('curso.guardar', { id: c.id, nombre: c.nombre, oculta: c.oculta, alumnos: val('m-alumnos') }, 'Alumnos agregados.'); },
   'f-corte': function () { return hacer('config.guardar', { corte: val('corte').slice(5) }, 'Fecha guardada.'); }

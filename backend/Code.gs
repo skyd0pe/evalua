@@ -19,10 +19,14 @@ function hojasDb_(cache) {
       h.getRange(1, 1, 1, TABLAS[t].length).setValues([TABLAS[t]]).setFontWeight('bold');
       h.setFrozenRows(1);
     }
-    var cab = h.getRange(1, 1, 1, TABLAS[t].length).getDisplayValues()[0];      // agrega columnas nuevas si la tabla creció
-    if (cab.join('|') !== TABLAS[t].join('|')) {
-      h.getRange(1, 1, h.getMaxRows(), TABLAS[t].length).setNumberFormat('@');
-      h.getRange(1, 1, 1, TABLAS[t].length).setValues([TABLAS[t]]).setFontWeight('bold');
+    var kc = 'cab:' + t, esperada = TABLAS[t].join('|');                     // agrega columnas nuevas si la tabla creció
+    if (cache.get(kc) !== esperada) {                                          // (se revisa una vez cada 6 horas, no en cada pedido)
+      var cab = h.getRange(1, 1, 1, TABLAS[t].length).getDisplayValues()[0];
+      if (cab.join('|') !== esperada) {
+        h.getRange(1, 1, h.getMaxRows(), TABLAS[t].length).setNumberFormat('@');
+        h.getRange(1, 1, 1, TABLAS[t].length).setValues([TABLAS[t]]).setFontWeight('bold');
+      }
+      cache.put(kc, esperada, 21600);
     }
     return (hojas[t] = h);
   }
@@ -119,8 +123,8 @@ function contexto_() {
 }
 
 function doPost(e) {
-  var out;
-  try { out = api(contexto_(), JSON.parse(e.postData.contents)); }
+  var out, t0 = Date.now();
+  try { out = api(contexto_(), JSON.parse(e.postData.contents)); out.ms = Date.now() - t0; }   // ms: lo que tardó el servidor, para medir
   catch (err) { console.error(err && err.stack || err); out = { ok: false, error: 'Hubo un problema en el servidor. Probá de nuevo.' }; }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
