@@ -55,4 +55,5 @@ node test/carga.js https://script.google.com/macros/s/XXXX/exec CLAVE   # lo mis
 - **Cuestionario:** el servidor manda una pregunta por vez, sin la respuesta correcta, mide el tiempo y guarda cada respuesta al instante. Recargar no reinicia el intento y cuesta la pregunta que estaba en pantalla.
 - **Puntos:** cada cuestionario vale hasta 100, tenga 5 o 10 preguntas. La tabla es por cuatrimestre.
 - **Asistencia:** P presente, T tarde (cuenta), J justificado (no cuenta), A ausente. Rendir "para ausentes" suma puntos pero sigue ausente. Una clase preparada y sin abrir no es una falta.
+- **Velocidad:** cada llamada a Google tarda 1 a 2 segundos solo de ida y vuelta, así que la pantalla junta en una sola llamada lo que antes eran varias (`lote`). El servidor guarda una copia de las pestañas que cambian poco en la memoria rápida de Google; se renueva al escribir desde la app y al editar la planilla a mano (`onEdit`). Intentos se lee siempre de la planilla.
 - **Nota sugerida:** promedio de los cuestionarios rendidos, de 1 a 10.
