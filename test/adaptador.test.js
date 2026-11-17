@@ -5,7 +5,7 @@ const test = require('node:test'), assert = require('node:assert'), fs = require
 function googleFalso() {
   const hojas = {}, cache = {};
   const hoja = n => ({
-    v: [],
+    v: [], getName: () => n,
     getMaxRows() { return Math.max(1000, this.v.length); }, getLastRow() { let i = this.v.length; while (i > 0 && this.v[i - 1].every(c => c === '')) i--; return i; },
     insertRowsAfter() {}, setFrozenRows() {},
     getRange(f, c, nf = 1, nc = 1) {
@@ -20,10 +20,10 @@ function googleFalso() {
       return r;
     }
   });
-  const ss = { flush() {}, getSheetByName: n => hojas[n] || null, insertSheet: n => (hojas[n] = hoja(n)), getSpreadsheetTimeZone: () => 'America/Argentina/Buenos_Aires', toast() {} };
-  return { hojas, sandbox: {
+  const ss = { flush() {}, getSheetByName: n => hojas[n] || null, getSheets: () => Object.values(hojas), insertSheet: n => (hojas[n] = hoja(n)), getSpreadsheetTimeZone: () => 'America/Argentina/Buenos_Aires', toast() {} };
+  return { hojas, cache, sandbox: {
     SpreadsheetApp: { getActive: () => ss, flush() {} },
-    CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = v; }, remove: k => { delete cache[k]; } }) },
+    CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), getAll: ks => Object.fromEntries(ks.filter(k => k in cache).map(k => [k, cache[k]])), put: (k, v) => { cache[k] = String(v); }, putAll: o => { Object.assign(cache, o); }, remove: k => { delete cache[k]; } }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: { getUuid: () => require('crypto').randomUUID(), formatDate: () => '2027-03-08' },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: t => ({ t, setMimeType() { return this; } }) },
@@ -68,4 +68,39 @@ test('adaptador de Google: un cuestionario completo pasando por doPost', () => {
   assert.strictEqual(g.hojas.Alumnos.v.findIndex(r => r[2] === 'Cata'), filaCata);
   assert.deepStrictEqual(ok({ a: 'asistencia', t, cursoId: p.cursos[0].id }).filas.map(f => f.nombre + ' ' + f.celdas[0].k), ['Ana A', 'Cata P', 'Dani A']);
   assert.strictEqual(post({ a: 'panel', t: 'inventado' }).code, 'ses');
+});
+
+test('adaptador de Google: la copia en memoria rápida se renueva al escribir desde la app y al editar a mano', () => {
+  const g = googleFalso();
+  vm.createContext(g.sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../core.js'), 'utf8') + '\n' + fs.readFileSync(path.join(__dirname, '../backend/Code.gs'), 'utf8'), g.sandbox);
+  const post = body => JSON.parse(g.sandbox.doPost({ postData: { contents: JSON.stringify(body) } }).t);
+  const ok = body => { const r = post(body); assert.ok(r.ok, body.a + ': ' + r.error); return r.d; };
+  g.sandbox.preparar();
+  const clave = g.hojas.Config.v.find(r => r[0] === 'clave')[1];
+  const t = ok({ a: 'login', clave }).tk;
+  ok({ a: 'curso.guardar', t, nombre: '1° A', alumnos: 'Ana\nBruno' });
+  assert.deepStrictEqual(ok({ a: 'cursos' }).map(c => c.nombre), ['1° A']);
+  assert.ok(Object.keys(g.cache).some(k => k.startsWith('dat:Cursos:')), 'quedó una copia de Cursos');
+  // Si la planilla cambia sin avisar, se sigue viendo la copia (prueba de que no se lee la planilla)...
+  g.hojas.Cursos.v[1][1] = 'Cambiado a mano';
+  assert.deepStrictEqual(ok({ a: 'cursos' }).map(c => c.nombre), ['1° A']);
+  // ...hasta que onEdit avisa.
+  g.sandbox.onEdit({ range: { getSheet: () => ({ getName: () => 'Cursos' }) } });
+  assert.deepStrictEqual(ok({ a: 'cursos' }).map(c => c.nombre), ['Cambiado a mano']);
+  // Escribir desde la app renueva la copia.
+  ok({ a: 'curso.guardar', t, nombre: '2° B', alumnos: 'Caro' });
+  assert.deepStrictEqual(ok({ a: 'cursos' }).map(c => c.nombre).sort(), ['2° B', 'Cambiado a mano']);
+  // Cambiar la contraseña a mano y avisar: la vieja deja de servir.
+  g.hojas.Config.v.find(r => r[0] === 'clave')[1] = 'otra-clave-larga';
+  g.sandbox.onEdit({ range: { getSheet: () => ({ getName: () => 'Config' }) } });
+  assert.ok(!post({ a: 'login', clave }).ok);
+  assert.ok(post({ a: 'login', clave: 'otra-clave-larga' }).ok);
+  // Una copia partida en varios pedazos se arma bien (preguntas largas).
+  const largo = Array.from({ length: 40 }, (_, i) => `${i + 1}. ${'Pregunta larguísima con tildes áéíóú '.repeat(40)}${i}\n*a) bien\nb) mal`).join('\n\n');
+  ok({ a: 'banco.guardar', t, titulo: 'Largo', texto: largo });
+  const b = ok({ a: 'panel', t }).bancos[0];
+  assert.ok(Object.keys(g.cache).some(k => /^dat:Preguntas:[^:]+:1$/.test(k)), 'Preguntas quedó en más de un pedazo');
+  assert.strictEqual(ok({ a: 'banco.ver', t, id: b.id }).preguntas.length, 40);
+  assert.strictEqual(ok({ a: 'banco.ver', t, id: b.id }).preguntas.length, 40);
 });
