@@ -50,6 +50,7 @@
     // Da una clase "de verdad" a través del servidor: abre, hace rendir a cada alumno y cierra.
     function dar(titulo, cuando, faltan, aMedias) {
       ctx.t = cuando.getTime();
+      t = ok('login', { clave: 'demo', device: 'siembra' }).tk;   // sesión nueva a la hora simulada (de madrugada, las 10 de hoy quedan a más de 6 h)
       T('clase.guardar', { cursoIds: cursos, bancoId: b[titulo], fecha: iso(cuando), segundos: 20, porAlumno: 5 });
       var pan = T('panel'), ok1 = buenas(b[titulo]);
       pan.clases.filter(function (c) { return c.fecha === iso(cuando) && c.bancoId === b[titulo]; }).forEach(function (cl) {
@@ -73,9 +74,11 @@
     dar('Las parábolas del Reino', dia(-14), 1, false);
     dar('Los sacramentos', dia(-7), 1, false);
     ctx.t = dia(-10).getTime();
+    t = ok('login', { clave: 'demo', device: 'siembra' }).tk;
     T('clase.guardar', { cursoIds: [cursos[0]], titulo: 'Visita a la parroquia', fecha: iso(dia(-10)) });
     dar('Pentecostés', dia(0), 3, true);                    // la clase de hoy queda abierta, con algunos sin rendir
     ctx.t = null;
+    t = ok('login', { clave: 'demo', device: 'siembra' }).tk;
     T('clase.guardar', { cursoIds: cursos, bancoId: b['Los sacramentos'], titulo: 'Repaso de sacramentos', fecha: iso(dia(7)), segundos: 20, porAlumno: 8 });
     Object.keys(g.c).forEach(function (k) { delete g.c[k]; });   // sesiones y PIN de la siembra: afuera
   }

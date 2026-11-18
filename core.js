@@ -610,14 +610,16 @@ var ACCIONES = {
     var clases = ctx.db.all('Clases').filter(function (c) { return c.cursoId === cu.id && periodoDe(c.fecha, corte) === per && cuentaComoClase(c); })
       .sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
     intentos(ctx).forEach(function (it) { its[it.claseId + '|' + it.alumnoId] = it; });
-    ctx.db.all('Marcas').forEach(function (m) { mar[m.id] = m.estado; });
+    var tomada = {};                                         // una clase sin cuestionario cuenta recién cuando se toma asistencia
+    ctx.db.all('Marcas').forEach(function (m) { mar[m.id] = m.estado; tomada[m.claseId] = 1; });
+    var sinTomar = function (c) { return !c.bancoId && !tomada[c.id]; };
     return { curso: cu.nombre, periodo: per,
-      clases: clases.map(function (c) { return { id: c.id, titulo: c.titulo, fecha: c.fecha, sinCuestionario: !c.bancoId }; }),
+      clases: clases.map(function (c) { return { id: c.id, titulo: c.titulo, fecha: c.fecha, sinCuestionario: !c.bancoId, sinTomar: sinTomar(c) }; }),
       filas: activos(ctx, cu.id).map(function (a) {
         var pres = 0, den = 0, sum = 0, n = 0;
         var celdas = clases.map(function (c) {
-          var k0 = c.id + '|' + a.id, it = its[k0], k = celda(it, mar[k0]), hecho = it && it.fin;
-          if (k !== 'J') { den++; if (k === 'P' || k === 'T') pres++; }
+          var k0 = c.id + '|' + a.id, it = its[k0], k = sinTomar(c) ? '-' : celda(it, mar[k0]), hecho = it && it.fin;
+          if (k !== 'J' && k !== '-') { den++; if (k === 'P' || k === 'T') pres++; }
           if (hecho) { sum += puntos(num(it.aciertos), num(it.total)); n++; }
           return { k: k, nota: hecho ? num(it.aciertos) + '/' + num(it.total) : '' };
         });

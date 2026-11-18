@@ -107,7 +107,7 @@ function vAlumno() {
     h = '<div class="stack"><h2>¿En qué curso estás?</h2>';
     if (!a.cursos.length) h += '<p class="empty">Tu docente todavía no cargó cursos.</p>';
     a.cursos.forEach(function (c) { h += '<button class="list-btn" data-act="elegir-curso" data-id="' + c.id + '" data-n="' + esc(c.nombre) + '">' + esc(c.nombre) + '</button>'; });
-    return h + '</div>';
+    return h + '<button class="btn ghost pie" data-act="rol" data-v="docente">Acceso docente</button></div>';
   }
   if (a.v === 'pin') {
     return '<form class="card" id="f-pin" novalidate><h2>PIN de ' + esc(a.cursoNombre) + '</h2>' +
@@ -124,7 +124,7 @@ function vAlumno() {
   }
   if (a.v === 'home') {
     var d = a.home, hayAbierto = false;
-    h = '<div class="stack"><button class="btn ghost" data-act="otro-curso" style="align-self:flex-start">← No soy ' + esc(d.alumno) + '</button><h2>Hola, ' + esc(d.alumno.split(' ')[0]) + '</h2>' +
+    h = '<div class="stack"><h2>Hola, ' + esc(d.alumno.split(' ')[0]) + '</h2>' +
       '<div class="card"><div class="mypts"><div><p class="meta">Tus puntos del cuatrimestre</p><b>' + d.puntos + '</b></div>' +
       (d.puesto && d.puntos ? '<span class="pill">Puesto ' + d.puesto + ' de ' + d.de + '</span>' : '') + '</div>' +
       (d.tabla ? '<button class="btn" data-act="al-tabla">Ver la tabla de posiciones</button>' : '') + '</div>';
@@ -132,7 +132,7 @@ function vAlumno() {
       var it = c.intento, puede = c.estado === 'abierto' && (!it || !it.fin);
       if (puede) hayAbierto = true;
       return '<article class="card' + (puede ? ' open' : '') + '"><div class="card-head"><h2>' + esc(c.titulo) + '</h2>' +
-        (it && it.fin ? '<span class="pill ' + nivel(it.aciertos / Math.max(1, it.total)) + '">' + it.aciertos + ' de ' + it.total + '</span>' : '<span class="pill good">Abierto</span>') + '</div>' +
+        (it && it.fin ? '<span class="pill plain">' + it.aciertos + ' de ' + it.total + '</span>' : '<span class="pill good">Abierto</span>') + '</div>' +
         '<p class="meta">' + fmtDate(c.fecha) + ' · ' + c.n + ' preguntas · ' + c.segundos + ' segundos cada una</p>' +
         (puede ? (it ? '<button class="btn primary" data-act="empezar" data-id="' + c.id + '">Continuar</button>'
                      : '<button class="btn primary" data-act="intro" data-id="' + c.id + '">Empezar</button>')
@@ -140,7 +140,8 @@ function vAlumno() {
           : '<button class="btn" data-act="revision" data-id="' + c.id + '">Ver la corrección</button>') + '</article>';
     }).join('');
     if (!hayAbierto) h += '<p class="empty">No hay ningún cuestionario abierto ahora. Cuando tu profe lo abra, tocá Actualizar.</p>';
-    return h + tarjetas + '<button class="btn" data-act="al-home">Actualizar</button></div>';
+    return h + tarjetas + '<button class="btn" data-act="al-home">Actualizar</button>' +
+      '<button class="btn ghost pie" data-act="otro-curso">No soy ' + esc(d.alumno) + '</button></div>';
   }
   if (a.v === 'intro') {
     var c = a.clase;
@@ -152,15 +153,17 @@ function vAlumno() {
   }
   if (a.v === 'fin') {
     var r = a.res;
-    return '<div class="stack"><div class="card" style="align-items:center;text-align:center"><p class="score">' + r.aciertos + ' de ' + r.total + '</p><p><b>+' + r.puntos + ' puntos</b></p>' +
-      '<span class="pill ' + nivel(r.aciertos / Math.max(1, r.total)) + '">' + (r.aciertos === r.total ? 'Todas bien' : r.aciertos / Math.max(1, r.total) >= .5 ? 'Bien, con cosas para repasar' : 'Hay que repasar este tema') + '</span>' +
+    var pc = r.aciertos / Math.max(1, r.total);
+    return '<div class="stack"><div class="card" style="align-items:center;text-align:center"><p class="meta">Sumaste</p><p class="score">+' + r.puntos + '</p><p class="meta">puntos</p>' +
+      '<p><b>' + r.aciertos + ' de ' + r.total + ' bien</b></p>' +
+      '<span class="pill' + (pc === 1 ? ' good' : '') + '">' + (pc === 1 ? '¡Todas bien!' : pc >= .5 ? 'Bien, con cosas para repasar' : 'Este tema vale la pena repasarlo') + '</span>' +
       '<p class="hint">La corrección pregunta por pregunta se habilita cuando tu profe cierre el cuestionario.</p></div>' +
       '<button class="btn primary" data-act="al-home">Volver</button></div>';
   }
   if (a.v === 'rev') {
     var v = a.rev;
     h = '<div class="stack"><button class="btn ghost" data-act="al-home" style="align-self:flex-start">← Volver</button><section class="card"><div class="card-head"><h2>' + esc(v.titulo) + '</h2>' +
-      '<span class="pill ' + nivel(v.aciertos / Math.max(1, v.total)) + '">' + v.aciertos + ' de ' + v.total + '</span></div>';
+      '<span class="pill plain">' + v.aciertos + ' de ' + v.total + '</span></div>';
     v.items.forEach(function (x, i) {
       h += '<div class="rev"><b>' + (i + 1) + '. ' + esc(x.texto) + '</b>' +
         (x.anulada ? '<span>Tu profe anuló esta pregunta: no cuenta.</span>'
@@ -183,14 +186,16 @@ function cabeza(pos, n) {
 }
 function vRun() {
   var a = S.al, r = a.run;
-  if (r.fase === 'leer') return '<div class="stack leer">' + cabeza(r.pos, r.n) + '<p class="qbig">' + esc(r.texto) + '</p>' +
-    '<div class="leerbar"><i id="lbar"></i></div><p class="meta" id="lmsg" aria-live="polite">Leé con calma: las opciones aparecen en <b id="lnum">' + Math.ceil(r.lectura / 1000) + '</b> segundos.</p>' +
+  /* Lectura y opciones tienen la misma forma: la pregunta no se mueve; la barra de lectura se convierte en el reloj. */
+  if (r.fase === 'leer') return '<div class="stack leer">' + cabeza(r.pos, r.n) + '<p class="qrun">' + esc(r.texto) + '</p>' +
+    '<div class="timer leer" role="timer" aria-label="Segundos para leer"><div class="tr"><i id="lbar"></i></div><span class="num" id="lnum">' + Math.ceil(r.lectura / 1000) + '</span></div>' +
+    '<p class="meta" id="lmsg" aria-live="polite">Leé con calma: las opciones aparecen cuando termina la barra gris.</p>' +
     '<div id="run-msg" class="meta" aria-live="polite"></div></div>';
   if (r.fase === 'guardando') return '<div class="stack">' + cabeza(r.pos, r.n) + '<p class="empty">Guardando tu última respuesta…</p><div id="run-msg" class="meta" aria-live="polite"></div></div>';
   var q = r.q;
-  return '<div class="stack">' + cabeza(q.pos, q.n) +
+  return '<div class="stack">' + cabeza(q.pos, q.n) + '<p class="qrun">' + esc(q.texto) + '</p>' +
     '<div class="timer" id="timer" data-level="ok" role="timer" aria-label="Segundos restantes"><div class="tr"><i id="tbar"></i></div><span class="num" id="tnum">' + Math.ceil(r.ms / 1000) + '</span></div>' +
-    '<p class="qtext">' + esc(q.texto) + '</p><div class="choices">' + q.opciones.map(function (o, i) {
+    '<div class="choices">' + q.opciones.map(function (o, i) {
       return '<button class="choice" data-act="responder" data-di="' + i + '" aria-pressed="false"><span class="k">' + 'ABCDEFGHI'[i] + '</span><span>' + esc(o) + '</span></button>';
     }).join('') + '</div><div id="run-msg" class="meta" aria-live="polite"></div></div>';
 }
@@ -217,7 +222,7 @@ function tick() {
   var ahora = performance.now();
   if (r.fase === 'leer') {
     var falta = r.leerHasta - ahora, lb = $('lbar');
-    if (lb) { lb.style.transform = 'scaleX(' + Math.max(0, Math.min(1, 1 - falta / Math.max(1, r.lectura))) + ')'; }
+    if (lb) { lb.style.transform = 'scaleX(' + Math.max(0, Math.min(1, falta / Math.max(1, r.lectura))) + ')'; }   // se vacía, igual que el reloj
     if (falta > 0) { if ($('lnum')) $('lnum').textContent = Math.ceil(falta / 1000); return; }
     if (r.q && r.q.pos === r.pos) { mostrarOpciones(); return; }
     if ($('lmsg') && !r.esperando) { r.esperando = true; $('lmsg').textContent = 'Cargando las opciones…'; }
@@ -306,11 +311,10 @@ function vDocente() {
     '<p class="meta">Esta parte es solo para el profesor. Si sos alumno, tocá <b>Alumno</b> arriba.</p>' +
     (DEMO ? '<p class="msg wrn">En esta demostración la contraseña es <b>demo</b>.</p>' : '') +
     '<div class="field"><label for="clave">Contraseña</label><input type="password" id="clave" autocomplete="current-password" autocapitalize="off" spellcheck="false"></div>' +
-    '<button type="submit" class="btn primary big">Entrar</button></form>';
+    '<button type="submit" class="btn primary big">Entrar</button><button type="button" class="btn ghost" data-act="rol" data-v="alumno">Soy alumno</button></form>';
   if (!d.p) return '<p class="empty">Cargando…</p>';
   var tabs = [['clases', 'Clases'], ['bancos', 'Preguntas'], ['resultados', 'Resultados'], ['asistencia', 'Asistencia'], ['tabla', 'Tabla'], ['cursos', 'Cursos']];
-  var h = '<div class="field"><label for="s-per">Cuatrimestre</label><select id="s-per">' + opciones(d.p.periodos, d.per, function (p) { return [p, perLabel(p)]; }) + '</select></div>' +
-    '<nav class="tabs" aria-label="Secciones del docente">' + tabs.map(function (t) {
+  var h = '<nav class="tabs" aria-label="Secciones del docente">' + tabs.map(function (t) {
       return '<button class="tab" data-act="tab" data-v="' + t[0] + '" aria-current="' + (d.tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</nav>';
   h += d.tab === 'clases' ? vClases() : d.tab === 'bancos' ? vBancos() : d.tab === 'resultados' ? vResultados() : d.tab === 'asistencia' ? vAsistencia()
     : d.tab === 'tabla' ? vTablaDoc() : vCursos();
@@ -318,6 +322,12 @@ function vDocente() {
 }
 
 /* ----- clases ----- */
+/* El cuatrimestre se elige dentro de las pestañas que lo usan, y solo si hay más de uno. */
+function selPer() {
+  var d = S.doc;
+  if (d.p.periodos.length < 2) return '';
+  return '<div class="field"><label for="s-per">Cuatrimestre</label><select id="s-per">' + opciones(d.p.periodos, d.per, function (p) { return [p, perLabel(p)]; }) + '</select></div>';
+}
 function vVivo(v) {
   if (!v) return '<p class="hint">Cargando quién respondió…</p>';
   var n = { listo: 0, rindiendo: 0, no: 0 }, dups = {};
@@ -327,29 +337,33 @@ function vVivo(v) {
       return '<span class="chip' + (f.e === 'listo' ? ' ok' : f.e === 'rindiendo' ? ' home' : '') + '">' + esc(f.nombre) + (f.e === 'rindiendo' ? ' (rindiendo)' : '') + (f.enCasa ? ' (en casa)' : '') + '</span>';
     }).join('') + '</div>' + Object.keys(dups).map(function (k) { return '<p class="msg wrn">Mismo teléfono: ' + esc(k) + '</p>'; }).join('');
 }
+function tarjetaClase(c) {
+  var d = S.doc, cu = cursoDe(c.cursoId) || { nombre: 'Curso eliminado', alumnos: [] }, ab = c.estado === 'abierto';
+  var est = !c.bancoId ? ['Sin cuestionario', 'plain'] : c.estado === 'nuevo' ? ['Sin abrir', 'plain'] : !ab ? ['Cerrado', 'plain'] : c.modo === 'ausentes' ? ['Abierto para ausentes', 'warn'] : ['Abierto', 'good'];
+  var acciones = '<div class="row">' +
+    (ab ? '<button class="btn primary big" data-act="clase-estado" data-id="' + c.id + '" data-v="cerrado">Cerrar cuestionario</button>'
+      : c.bancoId && c.estado === 'nuevo' ? '<button class="btn primary" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto">Abrir ahora</button>'
+      : c.bancoId ? '<button class="btn" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto">Reabrir en clase</button><button class="btn" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto" data-aus="1">Reabrir para ausentes</button>'
+      : '<button class="btn primary" data-act="ir-asis" data-id="' + c.cursoId + '">Tomar asistencia</button>') + '</div>';
+  var mas = '<div class="row">' + (c.bancoId && c.estado !== 'nuevo' ? '<button class="btn" data-act="ir-res" data-id="' + c.id + '">Resultados</button>' : '') +
+    '<button class="btn" data-act="clase-editar" data-id="' + c.id + '">Editar</button>' + confirmar('clase:' + c.id, 'Eliminar', 'clase-borrar', 'data-id="' + c.id + '"') + '</div>';
+  return '<article class="card' + (ab ? ' open' : '') + '"><div class="card-head"><h2>' + esc(c.titulo) + '</h2><span class="pill ' + est[1] + '">' + est[0] + '</span></div>' +
+    '<p class="meta"><b>' + fmtDate(c.fecha) + '</b> · ' + esc(cu.nombre) + ' · ' + (c.bancoId ? c.porAlumno + ' preguntas por alumno · ' + c.segundos + ' s cada una · ' + c.hechos + ' de ' + cu.alumnos.length + ' terminaron' : 'solo asistencia') + '</p>' +
+    (ab ? acciones + '<div class="live" id="vivo-' + c.id + '" aria-live="polite">' + vVivo(d.vivo[c.id]) + '</div>' + mas : acciones + mas) + '</article>';
+}
 function vClases() {
   var d = S.doc, p = d.p;
   if (d.fc) return vClaseForm();
   if (!p.cursos.length) return '<p class="empty">Primero cargá un curso en la pestaña Cursos.</p>';
-  var h = '<div class="stack"><button class="btn primary big" data-act="clase-nueva">Nueva clase</button>';
+  var abiertas = p.clases.filter(function (c) { return c.estado === 'abierto'; }).sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; });
+  var h = '<div class="stack">';
+  if (abiertas.length) h += '<section class="stack ahora"><h2>Abierto ahora</h2>' + abiertas.map(tarjetaClase).join('') + '</section>';
+  h += '<button class="btn big' + (abiertas.length ? '' : ' primary') + '" data-act="clase-nueva">Nueva clase</button>';
   if (p.cursos.length > 1) h += '<div class="field"><label for="s-fcurso">Mostrar</label><select id="s-fcurso"><option value="">Todos los cursos</option>' + opciones(p.cursos, d.fcurso, function (c) { return [c.id, c.nombre]; }) + '</select></div>';
-  var lista = p.clases.filter(function (c) { return !d.fcurso || c.cursoId === d.fcurso; }).sort(function (a, b) {
-    return (b.estado === 'abierto') - (a.estado === 'abierto') || (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0); });
-  if (!lista.length) h += '<p class="empty">No hay clases en este cuatrimestre. Creá la primera.</p>';
-  lista.forEach(function (c) {
-    var cu = cursoDe(c.cursoId) || { nombre: 'Curso eliminado', alumnos: [] }, ab = c.estado === 'abierto';
-    var est = !c.bancoId ? ['Sin cuestionario', 'plain'] : c.estado === 'nuevo' ? ['Sin abrir', 'plain'] : !ab ? ['Cerrado', 'plain'] : c.modo === 'ausentes' ? ['Abierto para ausentes', 'warn'] : ['Abierto', 'good'];
-    h += '<article class="card' + (ab ? ' open' : '') + '"><div class="card-head"><h2>' + esc(c.titulo) + '</h2><span class="pill ' + est[1] + '">' + est[0] + '</span></div>' +
-      '<p class="meta"><b>' + fmtDate(c.fecha) + '</b> · ' + esc(cu.nombre) + ' · ' + (c.bancoId ? c.porAlumno + ' preguntas por alumno · ' + c.segundos + ' s cada una · ' + c.hechos + ' de ' + cu.alumnos.length + ' terminaron' : 'solo asistencia') + '</p>' +
-      (ab ? '<div class="live" id="vivo-' + c.id + '" aria-live="polite">' + vVivo(d.vivo[c.id]) + '</div>' : '') + '<div class="row">' +
-      (ab ? '<button class="btn primary" data-act="clase-estado" data-id="' + c.id + '" data-v="cerrado">Cerrar cuestionario</button>'
-        : c.bancoId && c.estado === 'nuevo' ? '<button class="btn primary" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto">Abrir ahora</button>'
-        : c.bancoId ? '<button class="btn" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto">Reabrir en clase</button><button class="btn" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto" data-aus="1">Reabrir para ausentes</button>'
-        : '<button class="btn primary" data-act="ir-asis" data-id="' + c.cursoId + '">Tomar asistencia</button>') +
-      (c.bancoId && c.estado !== 'nuevo' ? '<button class="btn" data-act="ir-res" data-id="' + c.id + '">Resultados</button>' : '') +
-      '<button class="btn" data-act="clase-editar" data-id="' + c.id + '">Editar</button>' + confirmar('clase:' + c.id, 'Eliminar', 'clase-borrar', 'data-id="' + c.id + '"') + '</div></article>';
-  });
-  return h + '</div>';
+  var lista = p.clases.filter(function (c) { return c.estado !== 'abierto' && (!d.fcurso || c.cursoId === d.fcurso); }).sort(function (a, b) { return a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0; });
+  if (!lista.length && !abiertas.length) h += '<p class="empty">No hay clases en este cuatrimestre. Creá la primera.</p>';
+  h += lista.map(tarjetaClase).join('');
+  return h + selPer() + '</div>';
 }
 function vClaseForm() {
   var f = S.doc.fc, p = S.doc.p, ed = !!f.id;
@@ -417,8 +431,8 @@ function vBancos() {
 /* ----- resultados ----- */
 function vResultados() {
   var d = S.doc, lista = conCuestionario();
-  if (!lista.length) return '<p class="empty">Cuando abras el primer cuestionario, acá vas a ver cómo le fue a cada curso.</p>';
-  var h = '<div class="stack"><div class="field"><label for="s-res">Clase</label><select id="s-res">' + opciones(lista, d.resId, function (c) {
+  if (!lista.length) return '<div class="stack">' + selPer() + '<p class="empty">Cuando abras el primer cuestionario, acá vas a ver cómo le fue a cada curso.</p></div>';
+  var h = '<div class="stack">' + selPer() + '<div class="field"><label for="s-res">Clase</label><select id="s-res">' + opciones(lista, d.resId, function (c) {
     return [c.id, fmtDate(c.fecha) + ' · ' + c.titulo + ' · ' + (cursoDe(c.cursoId) || {}).nombre]; }) + '</select></div>';
   var r = d.res;
   if (!r) return h + '<p class="empty">Cargando…</p></div>';
@@ -448,12 +462,12 @@ function vResultados() {
 }
 
 /* ----- asistencia ----- */
-var CELDA = { P: ['P', 'good', 'presente'], T: ['T', 'warn', 'tarde'], J: ['J', 'plain', 'justificado'], A: ['A', 'crit', 'ausente'], H: ['A', 'crit', 'ausente, rindió en casa'] };
-var SIGUE = { A: 'P', H: 'P', P: 'T', T: 'J', J: '' };
+var CELDA = { '-': ['–', 'none', 'sin tomar'], P: ['P', 'good', 'presente'], T: ['T', 'warn', 'tarde'], J: ['J', 'plain', 'justificado'], A: ['A', 'crit', 'ausente'], H: ['A', 'crit', 'ausente, rindió en casa'] };
+var SIGUE = { '-': 'P', A: 'P', H: 'P', P: 'T', T: 'J', J: '' };
 function vAsistencia() {
   var d = S.doc, p = d.p;
   if (!p.cursos.length) return '<p class="empty">Cargá un curso para ver su asistencia.</p>';
-  var h = '<div class="stack"><div class="field"><label for="s-asis">Curso</label><select id="s-asis">' + opciones(p.cursos, d.asisCurso, function (c) { return [c.id, c.nombre]; }) + '</select></div>';
+  var h = '<div class="stack">' + selPer() + '<div class="field"><label for="s-asis">Curso</label><select id="s-asis">' + opciones(p.cursos, d.asisCurso, function (c) { return [c.id, c.nombre]; }) + '</select></div>';
   var a = d.asis;
   if (!a) return h + '<p class="empty">Cargando…</p></div>';
   if (!a.clases.length) return h + '<p class="empty">Este curso todavía no tuvo clases en este cuatrimestre. Las clases preparadas y sin abrir no cuentan.</p></div>';
@@ -463,23 +477,27 @@ function vAsistencia() {
         '<td class="n">' + (f.nota === null ? '–' : '<b>' + String(f.nota).replace('.', ',') + '</b>') + '</td></tr>'; }).join('') +
     '</tbody></table></div><p class="hint">La nota va de 1 a 10 y es el promedio de los cuestionarios que rindió. Es una sugerencia: la nota final la ponés vos.</p></section>';
   h += '<section class="card"><h2>Clase por clase</h2><div class="legend"><span><span class="pill good">P</span> presente</span><span><span class="pill warn">T</span> tarde</span><span><span class="pill plain">J</span> justificado</span><span><span class="pill crit">A</span> ausente</span></div>' +
+    (a.clases.some(function (c) { return c.sinTomar; }) ? '<p class="hint"><span class="pill plain">–</span> clase sin cuestionario donde todavía no tomaste asistencia: no cuenta hasta que la marques.</p>' : '') +
     '<p class="hint">Tocá una celda para cambiarla: presente, tarde, justificado, y de vuelta. El número de abajo es lo que sacó en el cuestionario.</p>' +
-    '<div class="tbl-wrap"><table class="grid"><thead><tr><th>Alumno</th>' + a.clases.map(function (c) { var x = fmtDate(c.fecha).split(' '); return '<th class="d" title="' + esc(c.titulo) + '">' + x[0] + '<br>' + x[1] + '</th>'; }).join('') + '</tr></thead><tbody>';
+    '<div class="tbl-wrap"><table class="grid"><thead><tr><th>Alumno</th>' + a.clases.map(function (c) {
+      var x = fmtDate(c.fecha).split(' ');
+      return '<th class="d" title="' + esc(c.titulo) + '">' + x[0] + '<br>' + x[1] +
+        (c.sinTomar ? '<button class="todos" data-act="marca-todos" data-id="' + c.id + '" aria-label="Marcar a todos presentes el ' + fmtDate(c.fecha) + '">Todos presentes</button>' : '') + '</th>';
+    }).join('') + '</tr></thead><tbody>';
   a.filas.forEach(function (f) {
     h += '<tr><td>' + esc(f.nombre) + '</td>' + f.celdas.map(function (c, i) {
       var k = CELDA[c.k];
       return '<td><button class="cell-btn ' + k[1] + '" data-act="marca" data-c="' + a.clases[i].id + '" data-a="' + f.id + '" data-k="' + c.k + '" aria-label="' + esc(f.nombre) + ', ' + fmtDate(a.clases[i].fecha) + ': ' + k[2] + '">' + k[0] + '</button>' +
         '<small class="nota">' + (c.k === 'H' ? 'casa ' : '') + (c.nota || '&nbsp;') + '</small></td>'; }).join('') + '</tr>';
   });
-  h += '</tbody></table></div>' + a.clases.filter(function (c) { return c.sinCuestionario; }).map(function (c) {
-    return '<div class="row"><span class="meta">' + fmtDate(c.fecha) + ' · ' + esc(c.titulo) + ' (sin cuestionario)</span><button class="btn" data-act="marca-todos" data-id="' + c.id + '">Marcar a todos presentes</button></div>'; }).join('') + '</section>';
+  h += '</tbody></table></div></section>';
   return h + '<div class="stack"><button class="btn primary big" data-act="copiar-asis">Copiar planilla</button><p class="hint">Se pega directo en Google Sheets o Excel, con la fecha y el tema de cada clase como columnas.</p><div id="copy-msg"></div></div></div>';
 }
 function asisTSV(a) {
   var filas = [['Alumno'].concat(a.clases.map(function (c) { return fmtFull(c.fecha) + ' - ' + c.titulo; }), ['Presentes', 'Clases', 'Asistencia', 'Nota'])];
   a.filas.forEach(function (f) {
     filas.push([f.nombre].concat(f.celdas.map(function (c) {
-      return c.k === 'H' ? 'A (rindió en casa ' + c.nota.replace('/', ' de ') + ')' : c.k + (c.nota ? ' (' + c.nota.replace('/', ' de ') + ')' : ''); }),
+      return c.k === '-' ? '' : c.k === 'H' ? 'A (rindió en casa ' + c.nota.replace('/', ' de ') + ')' : c.k + (c.nota ? ' (' + c.nota.replace('/', ' de ') + ')' : ''); }),
       [f.presentes, f.clases, f.pct === null ? '' : f.pct + '%', f.nota === null ? '' : String(f.nota).replace('.', ',')]));
   });
   return filas.map(function (r) { return r.map(function (x) { return String(x).replace(/[\t\n]/g, ' '); }).join('\t'); }).join('\n');
@@ -489,7 +507,7 @@ function asisTSV(a) {
 function vTablaDoc() {
   var d = S.doc;
   if (!d.p.cursos.length) return '<p class="empty">Todavía no hay cursos cargados.</p>';
-  return '<div class="stack">' + ((d.alcance || 'curso') === 'curso' ? '<div class="field"><label for="s-tabla">Curso</label><select id="s-tabla">' + opciones(d.p.cursos, d.tablaCurso, function (c) { return [c.id, c.nombre + (c.oculta ? ' (oculta para los alumnos)' : '')]; }) + '</select></div>' : '') +
+  return '<div class="stack">' + selPer() + ((d.alcance || 'curso') === 'curso' ? '<div class="field"><label for="s-tabla">Curso</label><select id="s-tabla">' + opciones(d.p.cursos, d.tablaCurso, function (c) { return [c.id, c.nombre + (c.oculta ? ' (oculta para los alumnos)' : '')]; }) + '</select></div>' : '') +
     vTabla(d.tabla, d.alcance || 'curso', false) + '</div>';
 }
 function vCursos() {
@@ -538,9 +556,10 @@ setInterval(sondear, 5000);
 /* ================= marco y eventos ================= */
 function render() {
   if (S.rol === 'alumno' && S.al.v === 'run' && S.al.run) { app.innerHTML = vRun(); return; }
-  var h = '<header class="top"><div class="brand"><h1>Evaluá</h1>' + (DEMO ? '<span class="pill warn">Demostración</span>' : '') + '</div>' +
-    '<div class="seg" role="group" aria-label="Vista">' + [['alumno', 'Alumno'], ['docente', 'Docente']].map(function (r) {
-      return '<button data-act="rol" data-v="' + r[0] + '" aria-pressed="' + (S.rol === r[0]) + '">' + r[1] + '</button>'; }).join('') + '</div></header>';
+  /* El alumno no ve el acceso del docente arriba: el docente entra con el enlace terminado en #docente
+     o con "Acceso docente", al pie de la lista de cursos. */
+  var h = '<header class="top"><div class="brand"><h1>Evaluá</h1>' + (S.rol === 'docente' ? '<span class="pill">Docente</span>' : '') +
+    (DEMO ? '<span class="pill warn">Demostración</span>' : '') + '</div></header>';
   if (DEMO) h += '<p class="note">Demostración: el servidor está simulado dentro de este navegador y los datos quedan solo en este dispositivo.</p>';
   app.innerHTML = h + (S.rol === 'docente' ? vDocente() : vAlumno());
 }

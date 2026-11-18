@@ -340,3 +340,16 @@ test('lote: varios pedidos en una llamada, con la sesión que entrega el login y
   const largo = api(w.ctx, { a: 'lote', t: w.t, pasos: Array.from({ length: 20 }, () => ({ a: 'panel' })) });
   assert.strictEqual(largo.d.length, 6);
 });
+
+test('asistencia: una clase sin cuestionario sin marcar no cuenta como falta hasta que se toma asistencia', () => {
+  const w = mundo();
+  w.doc('clase.guardar', { cursoIds: [w.curso.id], titulo: 'Película', fecha: '2027-03-10' });
+  const sin = w.doc('panel').clases.find(c => !c.bancoId);
+  let a = w.doc('asistencia', { cursoId: w.curso.id });
+  assert.strictEqual(a.clases[0].sinTomar, true);
+  assert.deepStrictEqual(a.filas.map(f => [f.celdas[0].k, f.pct]), [['-', null], ['-', null], ['-', null]]);
+  w.doc('marca', { claseId: sin.id, alumnoId: w.curso.alumnos[0].id, estado: 'P' });   // con una sola marca, los demás pasan a ausentes
+  a = w.doc('asistencia', { cursoId: w.curso.id });
+  assert.strictEqual(a.clases[0].sinTomar, false);
+  assert.deepStrictEqual(a.filas.map(f => [f.celdas[0].k, f.pct]), [['P', 100], ['A', 0], ['A', 0]]);
+});
