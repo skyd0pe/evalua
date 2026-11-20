@@ -118,7 +118,7 @@ function vAlumno() {
       '<button type="button" class="btn ghost" data-act="otro-curso">' + (a.nombre ? 'No soy ' + esc(a.nombre) : 'Cambiar de curso') + '</button></form>';
   }
   if (a.v === 'nombre') {
-    h = '<div class="stack"><h2>Elegí tu nombre</h2><p class="meta">Fijate bien: para cambiarlo después hay que volver a poner el PIN.</p>';
+    h = '<div class="stack"><h2>Elegí tu nombre</h2><p class="meta">Fijate bien: tu nombre queda vinculado a este teléfono. Si te equivocás, avisale a tu profe.</p>';
     a.alumnos.forEach(function (n) { h += '<button class="list-btn" data-act="elegir-alumno" data-id="' + n.id + '" data-n="' + esc(n.nombre) + '">' + esc(n.nombre) + '</button>'; });
     return h + '</div>';
   }
@@ -528,8 +528,10 @@ function vCursos() {
     if (ab) {
       h += '<div class="alumnos">' + c.alumnos.map(function (a) {
         if (d.eda === a.id) return '<form class="row" id="f-alumno" novalidate><input type="text" id="a-nombre" value="' + esc(a.nombre) + '" autocomplete="off" aria-label="Nombre del alumno"><button type="submit" class="btn primary">Guardar</button><button type="button" class="btn" data-act="alumno-editar" data-id="">Cancelar</button></form>';
-        return '<div class="row al"><span>' + esc(a.nombre) + '</span><span class="row"><button class="btn ghost" data-act="alumno-editar" data-id="' + a.id + '">Corregir</button>' + confirmar('al:' + a.id, 'Dar de baja', 'alumno-baja', 'data-id="' + a.id + '"') + '</span></div>';
-      }).join('') + '</div><p class="hint">Dar de baja saca al alumno de las listas pero conserva sus notas.</p>' +
+        return '<div class="row al"><span>' + esc(a.nombre) + (a.vinculado ? ' <span class="pill plain">con teléfono</span>' : '') + '</span><span class="row">' +
+          (a.vinculado ? '<button class="btn ghost" data-act="alumno-liberar" data-id="' + a.id + '">Liberar</button>' : '') +
+          '<button class="btn ghost" data-act="alumno-editar" data-id="' + a.id + '">Corregir</button>' + confirmar('al:' + a.id, 'Dar de baja', 'alumno-baja', 'data-id="' + a.id + '"') + '</span></div>';
+      }).join('') + '</div><p class="hint">Cada alumno queda vinculado al primer teléfono desde el que elige su nombre: nadie más puede entrar como él. Si cambia de teléfono o se le rompe, tocá <b>Liberar</b> y el próximo que elija ese nombre se lo queda. Dar de baja saca al alumno de las listas pero conserva sus notas.</p>' +
         '<form class="stack" id="f-mas-al" novalidate><div class="field"><label for="m-alumnos">Agregar alumnos</label><textarea id="m-alumnos" rows="3" placeholder="Un nombre por renglón"></textarea></div><div class="row"><button type="submit" class="btn primary">Agregar</button>' +
         confirmar('curso:' + c.id, 'Eliminar curso', 'curso-borrar', 'data-id="' + c.id + '"') + '</div></form>';
     }
@@ -624,6 +626,7 @@ var A = {
   'curso-borrar': function (d) { return hacer('curso.borrar', { id: d.id }, 'Curso eliminado.'); },
   'pin-nuevo': function (d) { return hacer('pin.nuevo', { cursoId: d.id }, 'PIN nuevo. El anterior ya no sirve.'); },
   'alumno-editar': function (d) { S.doc.eda = d.id || null; render(); var i = $('a-nombre'); if (i) i.focus(); },
+  'alumno-liberar': function (d) { return hacer('alumno.liberar', { id: d.id }, 'Nombre liberado. El próximo teléfono que lo elija se lo queda: que entre ahora.'); },
   'alumno-baja': function (d) { return hacer('alumno.guardar', { id: d.id, baja: true }, 'Alumno dado de baja.'); }
 };
 

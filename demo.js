@@ -80,6 +80,7 @@
     ctx.t = null;
     t = ok('login', { clave: 'demo', device: 'siembra' }).tk;
     T('clase.guardar', { cursoIds: cursos, bancoId: b['Los sacramentos'], titulo: 'Repaso de sacramentos', fecha: iso(dia(7)), segundos: 20, porAlumno: 8 });
+    ctx.db.all('Alumnos').forEach(function (a) { ctx.db.update('Alumnos', a.id, { vinculo: '' }); });   // los teléfonos de la siembra no existen: quien pruebe la demostración elige su nombre
     Object.keys(g.c).forEach(function (k) { delete g.c[k]; });   // sesiones y PIN de la siembra: afuera
   }
 })();

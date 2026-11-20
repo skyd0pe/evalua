@@ -53,6 +53,7 @@ test('adaptador de Google: un cuestionario completo pasando por doPost', () => {
   const e = ok({ a: 'entrar', cursoId: p.cursos[0].id, pin: p.cursos[0].pin, device: 'tel' });
   assert.deepStrictEqual(e.alumnos.map(a => a.nombre), ['Ana', 'Cata']);
   ok({ a: 'soy', t: e.tk, alumnoId: e.alumnos[1].id });
+  assert.strictEqual(g.hojas.Alumnos.v.find(r => r[2] === 'Cata')[4], 'tel', 'el nombre quedó vinculado al teléfono, en la planilla');
   let q = ok({ a: 'empezar', t: e.tk, claseId });
   while (!q.fin) q = ok({ a: 'responder', t: e.tk, claseId, pos: q.pos, di: q.opciones.indexOf('bien') });
   assert.strictEqual(q.puntos, 100);
@@ -103,4 +104,30 @@ test('adaptador de Google: la copia en memoria rápida se renueva al escribir de
   assert.ok(Object.keys(g.cache).some(k => /^dat:Preguntas:[^:]+:1$/.test(k)), 'Preguntas quedó en más de un pedazo');
   assert.strictEqual(ok({ a: 'banco.ver', t, id: b.id }).preguntas.length, 40);
   assert.strictEqual(ok({ a: 'banco.ver', t, id: b.id }).preguntas.length, 40);
+});
+
+test('adaptador de Google: una planilla de antes (Alumnos sin columna "vinculo") se completa sola y los alumnos quedan sin teléfono', () => {
+  const g = googleFalso();
+  vm.createContext(g.sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../core.js'), 'utf8') + '\n' + fs.readFileSync(path.join(__dirname, '../backend/Code.gs'), 'utf8'), g.sandbox);
+  const post = body => JSON.parse(g.sandbox.doPost({ postData: { contents: JSON.stringify(body) } }).t);
+  const ok = body => { const r = post(body); assert.ok(r.ok, body.a + ': ' + r.error); return r.d; };
+  g.sandbox.preparar();
+  const t = ok({ a: 'login', clave: g.hojas.Config.v.find(r => r[0] === 'clave')[1] }).tk;
+  ok({ a: 'curso.guardar', t, nombre: '1° A', alumnos: 'Ana\nBruno' });
+  // Se deja la hoja como estaba antes de esta versión: 4 columnas.
+  const h = g.hojas.Alumnos;
+  h.v = h.v.map(r => r.slice(0, 4)); h.v[0] = ['id', 'cursoId', 'nombre', 'activo'];
+  Object.keys(g.cache).filter(k => /^(cab|dat|ver):Alumnos/.test(k)).forEach(k => delete g.cache[k]);
+  const p = ok({ a: 'panel', t });
+  assert.deepStrictEqual(h.v[0], ['id', 'cursoId', 'nombre', 'activo', 'vinculo'], 'agrega la columna nueva');
+  assert.deepStrictEqual(p.cursos[0].alumnos.map(a => a.vinculado), [false, false]);
+  const e = ok({ a: 'entrar', cursoId: p.cursos[0].id, pin: p.cursos[0].pin, device: 'tel-A', alumnoId: p.cursos[0].alumnos[0].id });
+  assert.strictEqual(e.alumnoId, p.cursos[0].alumnos[0].id);
+  assert.strictEqual(h.v.find(r => r[2] === 'Ana')[4], 'tel-A');
+  const otro = ok({ a: 'entrar', cursoId: p.cursos[0].id, pin: p.cursos[0].pin, device: 'tel-B' });
+  assert.strictEqual(post({ a: 'soy', t: otro.tk, alumnoId: p.cursos[0].alumnos[0].id }).code, 'vinc');
+  ok({ a: 'alumno.liberar', t, id: p.cursos[0].alumnos[0].id });
+  assert.strictEqual(h.v.find(r => r[2] === 'Ana')[4], '');
+  ok({ a: 'soy', t: otro.tk, alumnoId: p.cursos[0].alumnos[0].id });
 });

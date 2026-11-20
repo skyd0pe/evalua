@@ -237,7 +237,7 @@ test('tabla: suma por cuatrimestre, empates comparten puesto, y se puede ocultar
   assert.strictEqual(periodoDe('2027-03-08', '07-15'), '2027-1'); assert.strictEqual(periodoDe('2027-08-02', '07-15'), '2027-2');
   w.ctx.t = new Date(2027, 7, 2, 10).getTime();        // agosto: segundo cuatrimestre, la tabla arranca de cero
   const tk2 = w.ok('login', { clave: 'secreta-larga', device: 'pc3' }).tk, c2 = w.ok('panel', { t: tk2 }).cursos[0];
-  const e = w.ok('entrar', { cursoId: c2.id, pin: c2.pin, device: 'telx', alumnoId: c2.alumnos[0].id });
+  const e = w.ok('entrar', { cursoId: c2.id, pin: c2.pin, device: 'tel0', alumnoId: c2.alumnos[0].id });   // el mismo teléfono de la primera vez
   assert.strictEqual(w.ok('inicio', { t: e.tk }).puntos, 0);
 });
 test('anular una pregunta o corregir cuál era la correcta recalcula las notas', () => {
@@ -262,16 +262,101 @@ test('cursos: nombres repetidos dan error en vez de borrarse; dar de baja conser
   assert.deepStrictEqual(w.doc('panel').cursos[0].alumnos.map(a => a.nombre), ['Ana María Díaz', 'Cata Ríos']);
   assert.strictEqual(w.doc('resultados', { claseId: w.clase.id }).filas[0].puntos, 100);
 });
-test('el mismo banco se usa en varios cursos, y dos alumnos en un mismo teléfono quedan señalados', () => {
+test('el mismo banco se usa en varios cursos', () => {
   const w = mundo();
   w.doc('curso.guardar', { nombre: '2° B', alumnos: 'Dani\nEli' });
   const ids = w.doc('panel').cursos.map(c => c.id);
   w.doc('clase.guardar', { cursoIds: ids, bancoId: w.bancoId, fecha: '2027-03-09', segundos: 20, porAlumno: 5 });
   assert.strictEqual(w.doc('panel').clases.filter(c => c.fecha === '2027-03-09').length, 2);
+});
+test('teléfono prestado: si el docente libera el nombre, otro alumno rinde en ese teléfono y queda señalado como "mismo teléfono"', () => {
+  const w = mundo();
   w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
-  rendir(w, w.entra(0, 'mismo'), 2); rendir(w, w.entra(1, 'mismo'), 2);
+  rendir(w, w.entra(0, 'mismo'), 2);
+  w.doc('alumno.liberar', { id: w.curso.alumnos[0].id });
+  rendir(w, w.entra(1, 'mismo'), 2);
   const v = w.doc('vivo', { claseId: w.clase.id });
   assert.deepStrictEqual(v.filas.map(f => [f.e, f.dup || '']), [['listo', 'Bruno Paz'], ['listo', 'Ana Díaz'], ['no', '']]);
+});
+
+/* ---------- un nombre, un teléfono ---------- */
+const ana = w => w.curso.alumnos[0].id, bruno = w => w.curso.alumnos[1].id;
+const pinDe = w => w.doc('panel').cursos[0].pin;
+const abrirTel = (w, dev, alumnoId) => w.ok('entrar', { cursoId: w.curso.id, pin: pinDe(w), device: dev, alumnoId: alumnoId || '' });
+test('vínculo: el primer teléfono que elige un nombre se lo queda; otro teléfono no puede elegirlo', () => {
+  const w = mundo();
+  w.entra(0);                                                        // Ana elige su nombre desde 'tel0'
+  assert.strictEqual(w.ctx.db.all('Alumnos').find(a => a.id === ana(w)).vinculo, 'tel0');
+  const otro = abrirTel(w, 'tel-del-vecino');                        // un compañero entra con el PIN del curso desde otro teléfono...
+  const r = w.mal('soy', { t: otro.tk, alumnoId: ana(w) });          // ...y toca el nombre de Ana
+  assert.strictEqual(r.code, 'vinc');
+  assert.match(r.error, /otro teléfono/);
+  assert.strictEqual(w.mal('inicio', { t: otro.tk }).code, 'ses', 'sin nombre elegido no ve nada de Ana');
+  w.ok('soy', { t: otro.tk, alumnoId: bruno(w) });                   // su propio nombre sí puede
+  const tk = abrirTel(w, 'tel0', ana(w));                            // Ana vuelve otro día con su teléfono: entra directo
+  assert.strictEqual(tk.alumnoId, ana(w));
+  assert.strictEqual(w.ok('soy', { t: tk.tk, alumnoId: ana(w) }).nombre, 'Ana Díaz');
+});
+test('vínculo: un teléfono que recordaba a un alumno de otro teléfono tiene que elegir de nuevo y ahí ve el aviso', () => {
+  const w = mundo();
+  w.entra(0);
+  const e = abrirTel(w, 'tel-otro', ana(w));                         // el navegador de otro teléfono "recordaba" a Ana
+  assert.strictEqual(e.alumnoId, '', 'no lo deja pasar como Ana');
+  assert.strictEqual(e.alumnos.length, 3);
+  assert.strictEqual(w.mal('soy', { t: e.tk, alumnoId: ana(w) }).code, 'vinc');
+});
+test('vínculo: un teléfono tampoco se vincula a dos alumnos', () => {
+  const w = mundo();
+  w.entra(0, 'tel0');
+  const e = abrirTel(w, 'tel0');
+  const r = w.mal('soy', { t: e.tk, alumnoId: bruno(w) });          // desde el teléfono de Ana, tocar el nombre de Bruno
+  assert.strictEqual(r.code, 'vinc');
+  assert.match(r.error, /ya está vinculado a otro alumno/);
+  assert.ok(!r.error.includes('Ana'), 'no le cuenta a un alumno quién es el otro');
+  assert.strictEqual(w.ctx.db.all('Alumnos').find(a => a.id === bruno(w)).vinculo, '');
+});
+test('vínculo: dos teléfonos eligiendo el mismo nombre a la vez, uno solo se lo queda', () => {
+  const w = mundo();
+  const a = abrirTel(w, 'tel-a'), b = abrirTel(w, 'tel-b');
+  w.ctx.cache.put('vin:' + ana(w), 'tel-a', 60);                     // el teléfono A ya reservó el nombre, pero la planilla todavía no lo muestra
+  assert.strictEqual(w.mal('soy', { t: b.tk, alumnoId: ana(w) }).code, 'vinc');
+  w.ok('soy', { t: a.tk, alumnoId: ana(w) });
+  assert.strictEqual(w.ctx.db.all('Alumnos').find(x => x.id === ana(w)).vinculo, 'tel-a');
+});
+test('vínculo: un alumno que ya había entrado antes de esta regla queda vinculado a su teléfono la próxima vez', () => {
+  const w = mundo();                                                 // en la planilla de antes, ningún alumno tiene teléfono
+  assert.strictEqual(w.ctx.db.all('Alumnos').every(a => a.vinculo === ''), true);
+  const e = abrirTel(w, 'tel-viejo', ana(w));
+  assert.strictEqual(e.alumnoId, ana(w));
+  assert.strictEqual(w.ctx.db.all('Alumnos').find(a => a.id === ana(w)).vinculo, 'tel-viejo');
+});
+test('vínculo: sin identificar el teléfono no se puede elegir nombre', () => {
+  const w = mundo();
+  const e = w.ok('entrar', { cursoId: w.curso.id, pin: pinDe(w) });   // sin device
+  assert.strictEqual(w.mal('soy', { t: e.tk, alumnoId: ana(w) }).code, 'vinc');
+});
+test('liberar: solo el docente; el teléfono viejo pierde el acceso y el nuevo se queda el nombre', () => {
+  const w = mundo();
+  w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
+  const viejo = w.entra(0, 'tel-viejo');
+  assert.strictEqual(w.doc('panel').cursos[0].alumnos[0].vinculado, true);
+  assert.strictEqual(w.doc('panel').cursos[0].alumnos[1].vinculado, false);
+  assert.strictEqual(w.mal('alumno.liberar', { t: viejo, id: ana(w) }).code, 'rol', 'un alumno no puede liberar');
+  w.ok('inicio', { t: viejo });
+  w.doc('alumno.liberar', { id: ana(w) });
+  assert.strictEqual(w.doc('panel').cursos[0].alumnos[0].vinculado, false);
+  for (const a of ['inicio', 'empezar', 'revision']) assert.strictEqual(w.mal(a, { t: viejo, claseId: w.clase.id }).code, 'ses', a + ' con el teléfono viejo');
+  const nuevo = abrirTel(w, 'tel-nuevo', ana(w));                    // Ana entra con el teléfono nuevo
+  assert.strictEqual(nuevo.alumnoId, ana(w));
+  assert.strictEqual(w.ok('inicio', { t: nuevo.tk }).alumno, 'Ana Díaz');
+  assert.strictEqual(w.mal('soy', { t: abrirTel(w, 'tel-viejo').tk, alumnoId: ana(w) }).code, 'vinc', 'el teléfono viejo ya no puede volver a entrar como Ana');
+});
+test('vínculo: un alumno dado de baja libera su teléfono para otro nombre', () => {
+  const w = mundo();
+  w.entra(0, 'tel0');
+  w.doc('alumno.guardar', { id: ana(w), baja: true });
+  const e = abrirTel(w, 'tel0');
+  w.ok('soy', { t: e.tk, alumnoId: bruno(w) });
 });
 
 test('al abrir se reserva un renglón por alumno; no cuenta como intento ni como falta, y Empezar lo completa', () => {

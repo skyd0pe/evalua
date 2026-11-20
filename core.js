@@ -5,7 +5,7 @@
 var TABLAS = {
   Config: ['id', 'valor'],
   Cursos: ['id', 'nombre', 'ocultarTabla'],
-  Alumnos: ['id', 'cursoId', 'nombre', 'activo'],
+  Alumnos: ['id', 'cursoId', 'nombre', 'activo', 'vinculo'],   // vinculo: el teléfono que eligió ese nombre la primera vez (ver vincular)
   Bancos: ['id', 'titulo'],
   Preguntas: ['id', 'bancoId', 'texto', 'opciones', 'correcta', 'anulada'],
   Clases: ['id', 'cursoId', 'bancoId', 'titulo', 'fecha', 'segundos', 'porAlumno', 'estado', 'modo'],
@@ -116,6 +116,32 @@ function pinDe(ctx, cursoId, crear) {
 }
 function activos(ctx, cursoId) {
   return ctx.db.all('Alumnos').filter(function (a) { return a.cursoId === cursoId && si(a.activo); }).sort(porNombre);
+}
+
+/* ---------- un nombre, un teléfono ----------
+   El primer teléfono que elige un nombre (o que vuelve a entrar con ese nombre recordado) queda vinculado a él.
+   Desde otro teléfono ya no se puede entrar como ese alumno hasta que el docente lo libere (alumno.liberar).
+   Un teléfono tampoco se vincula a dos alumnos. Al teléfono lo reconoce un número al azar que guarda el navegador. */
+var MSG_OTRO_TEL = 'Ese nombre ya fue elegido desde otro teléfono. Si sos vos, avisale a tu profe para que lo libere.';
+var MSG_TEL_USADO = 'Este teléfono ya está vinculado a otro alumno. Si lo compartís, avisale a tu profe.';
+function vincular(ctx, a, dev) {
+  if (!dev) throw E('No se pudo reconocer tu teléfono. Recargá la página.', 'vinc');
+  if (a.vinculo === dev) return;
+  if (a.vinculo) throw E(MSG_OTRO_TEL, 'vinc');
+  if (ctx.db.all('Alumnos').some(function (x) { return x.id !== a.id && x.vinculo === dev && si(x.activo); })) throw E(MSG_TEL_USADO, 'vinc');
+  // Primero se reserva en la memoria rápida (es instantáneo y con turno) y después se escribe en la planilla:
+  // si dos teléfonos eligen el mismo nombre a la vez, uno solo se lo queda. La reserva dura lo que tarda la planilla en verse.
+  var k = 'vin:' + a.id, libre = false;
+  ctx.lock(function () { var c = ctx.cache.get(k); if (!c || c === dev) { ctx.cache.put(k, dev, 60); libre = true; } });
+  if (!libre) throw E(MSG_OTRO_TEL, 'vinc');
+  try { ctx.db.update('Alumnos', a.id, { vinculo: dev }); } catch (e) { ctx.cache.remove(k); throw e; }
+  a.vinculo = dev;
+}
+/* El alumno de una sesión, mientras su nombre siga vinculado a este teléfono: si el docente lo libera, la sesión deja de servir. */
+function propio(ctx, s) {
+  var a = uno(ctx, 'Alumnos', s.alumnoId);
+  if (!a || !si(a.activo) || !s.device || a.vinculo !== s.device) throw E('Tenés que volver a entrar con el PIN.', 'ses');
+  return a;
 }
 
 /* ---------- bancos de preguntas y corrección ---------- */
@@ -287,6 +313,7 @@ var ACCIONES = {
     if (!p) throw E('El PIN de este curso venció. Pedile el nuevo a tu profe.', 'pin');
     if (String(r.pin || '').trim() !== String(p.pin)) { falla(ctx, 'pin:' + dev); falla(ctx, 'pinc:' + cu.id); throw E('PIN incorrecto.', 'pin'); }
     var als = activos(ctx, cu.id), yo = als.filter(function (a) { return a.id === r.alumnoId; })[0];
+    if (yo) { try { vincular(ctx, yo, dev); } catch (e) { if (!e.user) throw e; yo = null; } }   // el teléfono recordaba a un alumno: si ese nombre es de otro teléfono, tendrá que elegir de nuevo y ahí ve el aviso
     var ttl = Math.round(Math.max(num(p.vence) - ctx.now(), 45 * 60000) / 1000);
     return { tk: abrirSesion(ctx, { rol: 'alumno', cursoId: cu.id, alumnoId: yo ? yo.id : '', device: dev }, ttl), curso: cu.nombre,
       alumnoId: yo ? yo.id : '', alumnos: als.map(function (a) { return { id: a.id, nombre: a.nombre }; }) };
@@ -299,6 +326,7 @@ var ACCIONES = {
     if (s.alumnoId && s.alumnoId !== r.alumnoId) throw E('Para cambiar de alumno hay que volver a poner el PIN.', 'ses');
     var a = uno(ctx, 'Alumnos', r.alumnoId);
     if (!a || a.cursoId !== s.cursoId || !si(a.activo)) throw E('Ese alumno no es de este curso.');
+    vincular(ctx, a, s.device);
     s.alumnoId = a.id;
     cput(ctx, 'ses:' + r.t, s, s.ttl);
     return { nombre: a.nombre };
@@ -306,7 +334,7 @@ var ACCIONES = {
 
   inicio: function (ctx, r) {
     var s = sesion(ctx, r, 'alumno'), per = periodoHoy(ctx), corte = corteDe(ctx), mios = {};
-    var al = uno(ctx, 'Alumnos', s.alumnoId), cu = uno(ctx, 'Cursos', s.cursoId);
+    var al = propio(ctx, s), cu = uno(ctx, 'Cursos', s.cursoId);
     intentos(ctx).forEach(function (it) { if (it.alumnoId === s.alumnoId) mios[it.claseId] = it; });
     var clases = ctx.db.all('Clases').filter(function (c) {
       return c.cursoId === s.cursoId && c.bancoId && periodoDe(c.fecha, corte) === per && (c.estado === 'abierto' || mios[c.id]);
@@ -323,6 +351,7 @@ var ACCIONES = {
   empezar: function (ctx, r) {
     var s = sesion(ctx, r, 'alumno'), cl = uno(ctx, 'Clases', r.claseId);
     if (!cl || cl.cursoId !== s.cursoId || !cl.bancoId) throw E('Ese cuestionario no es de tu curso.');
+    propio(ctx, s);                             // responder no lo vuelve a revisar (es lo más apurado); alcanza con empezar e inicio
     var st = estado(ctx, cl.id, s.alumnoId);
     if (st) {                                   // ya había empezado: reintento o reconexión
       if (st.fin) throw E('Ya rendiste este cuestionario.', 'hecho');
@@ -383,6 +412,7 @@ var ACCIONES = {
   revision: function (ctx, r) {
     var s = sesion(ctx, r, 'alumno'), cl = uno(ctx, 'Clases', r.claseId);
     if (!cl || cl.cursoId !== s.cursoId) throw E('Ese cuestionario no es de tu curso.');
+    propio(ctx, s);
     if (cl.estado === 'abierto') throw E('Vas a poder ver la corrección cuando tu profe cierre el cuestionario.');
     var it = ctx.db.get('Intentos', idIntento(cl.id, s.alumnoId));
     if (!it || it.inicio === '') throw E('No rendiste este cuestionario.');
@@ -419,7 +449,7 @@ var ACCIONES = {
       cursos: ctx.db.all('Cursos').slice().sort(porNombre).map(function (c) {
         var p = pinDe(ctx, c.id, true);
         return { id: c.id, nombre: c.nombre, oculta: si(c.ocultarTabla), pin: String(p.pin), vence: num(p.vence),
-          alumnos: activos(ctx, c.id).map(function (a) { return { id: a.id, nombre: a.nombre }; }) };
+          alumnos: activos(ctx, c.id).map(function (a) { return { id: a.id, nombre: a.nombre, vinculado: !!a.vinculo }; }) };
       }),
       bancos: ctx.db.all('Bancos').slice().sort(function (a, b) { return a.titulo.localeCompare(b.titulo, 'es'); }).map(function (b) {
         var c = cuenta[b.id] || { n: 0, an: 0 };
@@ -479,6 +509,15 @@ var ACCIONES = {
     if (activos(ctx, a.cursoId).some(function (x) { return x.id !== a.id && x.nombre.toLowerCase() === nombre.toLowerCase(); }))
       throw E('Ya hay otro alumno con ese nombre en el curso.');
     ctx.db.update('Alumnos', a.id, { nombre: nombre });
+    return {};
+  },
+
+  'alumno.liberar': function (ctx, r) {   // para un teléfono nuevo, roto o prestado: el próximo que elija ese nombre se lo queda
+    sesion(ctx, r, 'docente');
+    var a = uno(ctx, 'Alumnos', r.id);
+    if (!a) throw E('Ese alumno no existe.');
+    ctx.db.update('Alumnos', a.id, { vinculo: '' });
+    ctx.cache.remove('vin:' + a.id);
     return {};
   },
 
