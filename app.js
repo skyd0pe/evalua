@@ -533,9 +533,10 @@ function vCursos() {
           '<button class="btn ghost" data-act="alumno-editar" data-id="' + a.id + '">Corregir</button>' + confirmar('al:' + a.id, 'Dar de baja', 'alumno-baja', 'data-id="' + a.id + '"') + '</span></div>';
       }).join('') + '</div><p class="hint">Cada alumno queda vinculado al primer teléfono desde el que elige su nombre: nadie más puede entrar como él. Si cambia de teléfono o se le rompe, tocá <b>Liberar</b> y el próximo que elija ese nombre se lo queda. Dar de baja saca al alumno de las listas pero conserva sus notas.</p>' +
         '<form class="stack" id="f-mas-al" novalidate><div class="field"><label for="m-alumnos">Agregar alumnos</label><textarea id="m-alumnos" rows="3" placeholder="Un nombre por renglón"></textarea></div><div class="row"><button type="submit" class="btn primary">Agregar</button>' +
-        confirmar('curso:' + c.id, 'Eliminar curso', 'curso-borrar', 'data-id="' + c.id + '"') + '</div></form>';
+        '</div></form>';
     }
-    h += '</article>';
+    h += '<div class="row">' + confirmar('curso:' + c.id, 'Eliminar curso', 'curso-borrar', 'data-id="' + c.id + '"') + '</div>' +
+      (c.nClases ? '<p class="hint">Eliminar el curso borra también sus ' + c.nClases + (c.nClases === 1 ? ' clase' : ' clases') + ', con las notas y la asistencia. No se puede deshacer.</p>' : '') + '</article>';
   });
   var anio = p.hoy.slice(0, 4);
   return h + '<form class="card" id="f-corte" novalidate><h2>Cuatrimestres</h2><p class="meta">La tabla de posiciones, la asistencia y la nota se calculan por cuatrimestre.</p>' +
@@ -623,7 +624,7 @@ var A = {
   'curso-nuevo': function () { S.doc.cf = true; render(); },
   'curso-abrir': function (d) { S.doc.cursoAbierto = d.id || null; S.doc.eda = null; render(); },
   'curso-tabla': function (d) { var c = cursoDe(d.id); return hacer('curso.guardar', { id: c.id, nombre: c.nombre, oculta: !c.oculta }, c.oculta ? 'Los alumnos vuelven a ver la tabla.' : 'Tabla oculta para este curso.'); },
-  'curso-borrar': function (d) { return hacer('curso.borrar', { id: d.id }, 'Curso eliminado.'); },
+  'curso-borrar': function (d) { return hacer('curso.borrar', { id: d.id, conHistorial: true }, 'Curso eliminado.'); },
   'pin-nuevo': function (d) { return hacer('pin.nuevo', { cursoId: d.id }, 'PIN nuevo. El anterior ya no sirve.'); },
   'alumno-editar': function (d) { S.doc.eda = d.id || null; render(); var i = $('a-nombre'); if (i) i.focus(); },
   'alumno-liberar': function (d) { return hacer('alumno.liberar', { id: d.id }, 'Nombre liberado. El próximo teléfono que lo elija se lo queda: que entre ahora.'); },

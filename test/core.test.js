@@ -438,3 +438,36 @@ test('asistencia: una clase sin cuestionario sin marcar no cuenta como falta has
   assert.strictEqual(a.clases[0].sinTomar, false);
   assert.deepStrictEqual(a.filas.map(f => [f.celdas[0].k, f.pct]), [['P', 100], ['A', 0], ['A', 0]]);
 });
+
+test('eliminar curso: con clases pide confirmar y borra todo (clases, notas, asistencia, alumnos y PIN) sin tocar otros cursos', () => {
+  const w = mundo();
+  w.doc('curso.guardar', { nombre: '2° B', alumnos: 'Dani\nEli' });
+  const otro = w.doc('panel').cursos.find(c => c.nombre === '2° B');
+  w.doc('clase.guardar', { cursoIds: [otro.id], bancoId: w.bancoId, fecha: '2027-03-09', segundos: 20, porAlumno: 5 });
+  w.doc('clase.estado', { id: w.clase.id, estado: 'abierto' });
+  rendir(w, w.entra(0), 3);
+  w.doc('marca', { claseId: w.clase.id, alumnoId: w.curso.alumnos[1].id, estado: 'T' });
+  assert.strictEqual(w.doc('panel').cursos.find(c => c.id === w.curso.id).nClases, 1);
+  const r = w.mal('curso.borrar', { t: w.t, id: w.curso.id });
+  assert.strictEqual(r.code, 'historial');
+  assert.match(r.error, /1 clase cargada/);
+  assert.strictEqual(w.ctx.db.all('Cursos').length, 2, 'sin confirmar no se borra nada');
+  w.doc('curso.borrar', { id: w.curso.id, conHistorial: true });
+  const p = w.doc('panel');
+  assert.deepStrictEqual(p.cursos.map(c => c.nombre), ['2° B']);
+  assert.strictEqual(p.clases.length, 1, 'queda la clase del otro curso');
+  assert.strictEqual(w.ctx.db.all('Intentos').length, 0);
+  assert.strictEqual(w.ctx.db.all('Marcas').length, 0);
+  assert.deepStrictEqual(w.ctx.db.all('Alumnos').map(a => a.nombre).sort(), ['Dani', 'Eli']);
+  assert.deepStrictEqual(w.ctx.db.all('Pines').map(x => x.id), [otro.id]);
+  assert.match(w.mal('curso.borrar', { t: w.t, id: w.curso.id }).error, /no existe/);
+});
+test('eliminar curso: sin clases se borra directo, y un alumno no puede', () => {
+  const w = mundo();
+  w.doc('curso.guardar', { nombre: '3° C', alumnos: 'Zoe' });
+  const c = w.doc('panel').cursos.find(x => x.nombre === '3° C');
+  assert.strictEqual(c.nClases, 0);
+  assert.strictEqual(w.mal('curso.borrar', { t: w.entra(0), id: c.id }).code, 'rol');
+  w.doc('curso.borrar', { id: c.id });
+  assert.strictEqual(w.doc('panel').cursos.length, 1);
+});

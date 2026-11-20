@@ -440,15 +440,15 @@ var ACCIONES = {
   /* docente */
   panel: function (ctx, r) {
     sesion(ctx, r, 'docente');
-    var corte = corteDe(ctx), per = r.periodo || periodoHoy(ctx), pers = {}, hechos = {}, usos = {}, cuenta = {};
+    var corte = corteDe(ctx), per = r.periodo || periodoHoy(ctx), pers = {}, hechos = {}, usos = {}, cuenta = {}, nCl = {};
     pers[periodoHoy(ctx)] = 1;
-    ctx.db.all('Clases').forEach(function (c) { pers[periodoDe(c.fecha, corte)] = 1; if (c.bancoId) usos[c.bancoId] = (usos[c.bancoId] || 0) + 1; });
+    ctx.db.all('Clases').forEach(function (c) { pers[periodoDe(c.fecha, corte)] = 1; if (c.bancoId) usos[c.bancoId] = (usos[c.bancoId] || 0) + 1; nCl[c.cursoId] = (nCl[c.cursoId] || 0) + 1; });
     intentos(ctx).forEach(function (it) { if (it.fin) hechos[it.claseId] = (hechos[it.claseId] || 0) + 1; });
     ctx.db.all('Preguntas').forEach(function (q) { var c = cuenta[q.bancoId] || (cuenta[q.bancoId] = { n: 0, an: 0 }); if (si(q.anulada)) c.an++; else c.n++; });
     return { periodo: per, periodos: Object.keys(pers).sort().reverse(), corte: corte, hoy: ctx.hoy(), ahora: ctx.now(),
       cursos: ctx.db.all('Cursos').slice().sort(porNombre).map(function (c) {
         var p = pinDe(ctx, c.id, true);
-        return { id: c.id, nombre: c.nombre, oculta: si(c.ocultarTabla), pin: String(p.pin), vence: num(p.vence),
+        return { id: c.id, nombre: c.nombre, oculta: si(c.ocultarTabla), pin: String(p.pin), vence: num(p.vence), nClases: nCl[c.id] || 0,
           alumnos: activos(ctx, c.id).map(function (a) { return { id: a.id, nombre: a.nombre, vinculado: !!a.vinculo }; }) };
       }),
       bancos: ctx.db.all('Bancos').slice().sort(function (a, b) { return a.titulo.localeCompare(b.titulo, 'es'); }).map(function (b) {
@@ -494,8 +494,16 @@ var ACCIONES = {
 
   'curso.borrar': function (ctx, r) {
     sesion(ctx, r, 'docente');
-    if (ctx.db.all('Clases').some(function (c) { return c.cursoId === r.id; })) throw E('Este curso tiene clases cargadas. Borrá primero sus clases.');
+    if (!uno(ctx, 'Cursos', r.id)) throw E('Ese curso no existe.');
+    var clases = ctx.db.all('Clases').filter(function (c) { return c.cursoId === r.id; }), ids = {};
+    if (clases.length && !r.conHistorial) throw E('Este curso tiene ' + clases.length + (clases.length === 1 ? ' clase cargada' : ' clases cargadas') + ', con sus notas y asistencia. Confirmá que querés borrar todo.', 'historial');
+    clases.forEach(function (c) { ids[c.id] = 1; });
+    ['Intentos', 'Marcas'].forEach(function (t) {   // las notas y la asistencia de sus clases se borran con el curso
+      ctx.db.all(t).filter(function (x) { return ids[x.claseId]; }).forEach(function (x) { ctx.db.remove(t, x.id); });
+    });
+    clases.forEach(function (c) { ctx.db.remove('Clases', c.id); });
     ctx.db.all('Alumnos').filter(function (a) { return a.cursoId === r.id; }).forEach(function (a) { ctx.db.remove('Alumnos', a.id); });
+    if (uno(ctx, 'Pines', r.id)) ctx.db.remove('Pines', r.id);
     ctx.db.remove('Cursos', r.id);
     return {};
   },
