@@ -471,3 +471,25 @@ test('eliminar curso: sin clases se borra directo, y un alumno no puede', () => 
   w.doc('curso.borrar', { id: c.id });
   assert.strictEqual(w.doc('panel').cursos.length, 1);
 });
+
+test('device y acción: nombres heredados de Object no rompen el servidor ni el panel', () => {
+  const w = mundo();
+  // un alumno con un identificador de teléfono "raro" que sí pasa el filtro de caracteres
+  for (const dev of ['constructor', '__proto__', 'toString']) {
+    const w2 = mundo();
+    w2.doc('clase.estado', { id: w2.clase.id, estado: 'abierto' });
+    w2.ok('empezar', { t: w2.entra(0, dev), claseId: w2.clase.id });
+    const v = w2.doc('vivo', { claseId: w2.clase.id });
+    assert.strictEqual(v.filas.find(f => f.nombre === 'Ana Díaz').e, 'rindiendo', dev);
+    assert.ok(w2.doc('resultados', { claseId: w2.clase.id }).filas.length === 3, dev);
+  }
+  // caracteres fuera de lo permitido o demasiado largo: se rechaza
+  for (const dev of ['a b', 'x'.repeat(65), '<img>', 'a:b']) {
+    assert.strictEqual(w.mal('cursos', { device: dev }).code, 'vinc', dev);
+  }
+  // acciones heredadas de Object: pedido desconocido, sin excepción
+  for (const a of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf'])
+    assert.strictEqual(api(w.ctx, { a }).error, 'Pedido desconocido.', a);
+  // un nombre de alumno como "constructor" no cuenta como repetido
+  w.doc('curso.guardar', { id: w.curso.id, nombre: '1° A', alumnos: 'constructor' });
+});

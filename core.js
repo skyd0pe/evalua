@@ -481,7 +481,7 @@ var ACCIONES = {
     var nombre = String(r.nombre || '').trim(), id = r.id;
     if (!nombre) throw E('Falta el nombre del curso.');
     var nuevos = String(r.alumnos || '').split('\n').map(function (x) { return x.trim().replace(/\s+/g, ' '); }).filter(Boolean);
-    var ya = {}, rep = [];
+    var ya = Object.create(null), rep = [];
     if (id) activos(ctx, id).forEach(function (a) { ya[a.nombre.toLowerCase()] = 1; });
     nuevos.forEach(function (n) { var k = n.toLowerCase(); if (ya[k] && rep.indexOf(n) < 0) rep.push(n); ya[k] = 1; });
     if (rep.length) throw E('Hay nombres repetidos: ' + rep.join(', ') + '. Agregales algo para distinguirlos, por ejemplo el segundo nombre.');
@@ -701,7 +701,7 @@ function resultadosDe(ctx, r, detalle) {
   sesion(ctx, r, 'docente');
   var cl = uno(ctx, 'Clases', r.claseId);
   if (!cl) throw E('Esa clase no existe.');
-  var cu = uno(ctx, 'Cursos', cl.cursoId), its = {}, ids = {}, devs = {}, nom = {};
+  var cu = uno(ctx, 'Cursos', cl.cursoId), its = {}, ids = {}, devs = Object.create(null), nom = {};
   var alumnos = ctx.db.all('Alumnos').filter(function (a) { return a.cursoId === cl.cursoId; });
   alumnos.forEach(function (a) { nom[a.id] = a.nombre; });
   intentos(ctx).forEach(function (it) {
@@ -738,6 +738,7 @@ function resultadosDe(ctx, r, detalle) {
    Se hacen en orden, con la misma sesión; si uno falla, los siguientes no se hacen. Si un paso entrega una sesión nueva
    (login, entrar), los siguientes la usan. */
 var MAX_LOTE = 6;
+var DEVICE_OK = /^[A-Za-z0-9_-]{0,64}$/;   // el identificador del teléfono lo manda el navegador: solo letras, números, guion y guion bajo
 function api(ctx, req) {
   if (req && req.a === 'lote') {
     var pasos = Array.isArray(req.pasos) ? req.pasos.slice(0, MAX_LOTE) : [], out = [], t = req.t;
@@ -754,8 +755,9 @@ function api(ctx, req) {
     return { ok: true, d: out };
   }
   try {
-    var f = ACCIONES[req && req.a];
+    var f = req && typeof req.a === 'string' && Object.prototype.hasOwnProperty.call(ACCIONES, req.a) ? ACCIONES[req.a] : null;
     if (!f) throw E('Pedido desconocido.');
+    if (req.device !== undefined && !DEVICE_OK.test(String(req.device))) throw E('No se pudo reconocer tu teléfono. Recargá la página.', 'vinc');
     return { ok: true, d: f(ctx, req) };
   } catch (e) {
     if (e.user) return { ok: false, error: e.message, code: e.code };
