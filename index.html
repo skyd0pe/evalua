@@ -74,10 +74,15 @@ button,input,select,textarea{font:inherit;color:inherit}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .note{font-size:.85rem;color:var(--muted);background:var(--surface);border:1px dashed var(--line);padding:8px 12px;border-radius:var(--r)}
 
-.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-@media (min-width:560px){.tabs{grid-template-columns:repeat(6,1fr)}}
 .tab{border:2px solid var(--line);background:var(--surface);border-radius:10px 10px 4px 4px;padding:8px 4px;min-height:44px;font-weight:700;color:var(--muted);cursor:pointer;font-size:.92rem;white-space:nowrap}
-.tab[aria-current="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.bnav{position:fixed;left:0;right:0;bottom:0;z-index:9;background:var(--surface);border-top:2px solid var(--ink);padding-bottom:env(safe-area-inset-bottom)}
+.bnav-in{max-width:680px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.bnav .tab{border:0;border-radius:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:62px;padding:8px 2px 6px;font-size:.8rem}
+.bnav .tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bnav .tab[aria-current="true"]{color:var(--ink);box-shadow:inset 0 4px 0 var(--hl)}
+.con-bnav .wrap{padding-bottom:104px}
+.con-bnav .toast{bottom:78px}
+.btn.atras{align-self:flex-start;padding-left:0}
 
 .stack{display:flex;flex-direction:column;gap:12px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 16px 16px 22px;box-shadow:inset 3px 0 0 color-mix(in srgb,var(--crit) 35%,transparent);display:flex;flex-direction:column;gap:10px}
@@ -90,7 +95,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .btn.ghost{border-color:transparent;background:none;color:var(--accent);padding-left:4px;padding-right:4px}
 .btn.danger.solid{background:var(--crit);border-color:var(--crit);color:var(--surface)}
 .btn.danger.big{width:100%}
-.pin[aria-invalid="true"]{border-color:var(--crit)}
 .btn.danger{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 40%,transparent)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.big{font-size:1.1rem;padding:14px 18px;width:100%}
@@ -189,7 +193,12 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .qrun{font-family:var(--display);font-weight:800;font-size:clamp(1.4rem,5.6vw,2rem);line-height:1.18;text-wrap:balance;margin:6px 0 0;min-height:2.4em}
 .timer.leer .num{color:var(--muted)} .timer.leer .tr i{background:var(--muted)}
 fieldset{border:0;padding:0;margin:0;min-width:0}
-.pin{font-family:var(--display);font-size:2rem;letter-spacing:.4em;text-align:center;font-variant-numeric:tabular-nums}
+/* PIN: cuatro cajitas que muestran lo que hay en el campo real, invisible y encima de ellas */
+.pin4{position:relative;display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.pin4 input{position:absolute;inset:0;width:100%;height:100%;opacity:0;font-size:16px;cursor:text}
+.pin4 .dig{height:68px;display:grid;place-items:center;background:var(--surface);border:2px solid var(--ink);border-radius:var(--r);font-family:var(--display);font-weight:800;font-size:1.9rem;font-variant-numeric:tabular-nums}
+.pin4:focus-within .dig.on{border-color:var(--accent);box-shadow:4px 4px 0 var(--hl)}
+.pin4:has(input[aria-invalid="true"]) .dig{border-color:var(--crit);background:var(--crit-soft)}
 .pinbox{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bg);border:2px dashed var(--ink);border-radius:var(--r);padding:12px 14px}
 .pinbox b{display:block;font-family:var(--display);font-size:2.2rem;letter-spacing:.18em;line-height:1.1;font-variant-numeric:tabular-nums}
 .pinlado{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
@@ -197,10 +206,12 @@ fieldset{border:0;padding:0;margin:0;min-width:0}
 .check{display:flex;align-items:center;gap:8px;font-weight:400;border:1px solid var(--line);border-radius:10px;padding:9px 12px;min-height:44px;background:var(--bg);cursor:pointer}
 .check input{width:20px;height:20px;accent-color:var(--accent)}
 .alumnos{display:flex;flex-direction:column;border-top:1px solid var(--line)}
-.alumnos .al{justify-content:space-between;border-bottom:1px solid var(--line);padding:2px 0;flex-wrap:wrap}   /* si no entran, los botones pasan abajo del nombre */
-.alumnos .al>span:first-child{overflow-wrap:break-word;flex:1 1 100px;min-width:0}
-.alumnos .al>.row{flex-wrap:wrap;flex:none;max-width:100%;gap:2px}
-.alumnos .al .btn{min-height:40px;padding:6px 10px;font-size:.92rem}
+.alumnos .al{border-bottom:1px solid var(--line)}
+.alumnos .al-fila{justify-content:space-between;flex-wrap:nowrap}
+.alumnos .al-fila>span:first-child{overflow-wrap:break-word;min-width:0}
+.alumnos .btn.mas{flex:none;font-size:1.5rem;line-height:1;min-width:44px;padding:0 10px;color:var(--ink)}
+.alumnos .al-opc{padding:2px 0 12px;gap:8px}
+.alumnos .al .btn{min-height:44px}
 .alumnos form{padding:8px 0;border-bottom:1px solid var(--line)}
 .alumnos form input{flex:1;min-width:140px;width:auto}
 .toast{position:fixed;left:16px;right:16px;bottom:16px;max-width:520px;margin:0 auto;padding:12px 14px;border-radius:12px;background:var(--ink);color:var(--bg);font-weight:700;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .2s,transform .2s;z-index:10;white-space:pre-line}

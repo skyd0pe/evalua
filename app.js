@@ -88,6 +88,13 @@ function irCursos() {
 }
 function ponerHome(d) { S.al.home = d; S.al.nombre = d.alumno; S.al.v = 'home'; recordar(); render(); }
 function irHome() { return call('inicio').then(ponerHome); }
+/* Las cajitas muestran lo que hay en el campo real; la que sigue por completar queda resaltada. Escribir borra el aviso de error. */
+function pintarPin() {
+  var i = $('pin'); if (!i) return;
+  var v = i.value = i.value.replace(/\D/g, '').slice(0, 4), e = $('pin-err');
+  if (e && !e.hidden) { e.hidden = true; i.removeAttribute('aria-invalid'); }
+  document.querySelectorAll('#pin-cajas .dig').forEach(function (s, j) { s.textContent = v.charAt(j); s.classList.toggle('on', j === Math.min(v.length, 3)); });
+}
 function entrar(pin) {
   var a = S.al;
   var pasos = [{ a: 'entrar', cursoId: a.cursoId, pin: pin, alumnoId: a.alumnoId || '' }];
@@ -112,7 +119,8 @@ function vAlumno() {
   if (a.v === 'pin') {
     return '<form class="card" id="f-pin" novalidate><h2>PIN de ' + esc(a.cursoNombre) + '</h2>' +
       '<p class="meta">Son 4 números. Tu profe los dice en clase y cambian cada 4 horas.</p>' +
-      '<div class="field"><label for="pin">PIN</label><input id="pin" class="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-describedby="pin-err"><p id="pin-err" class="msg err" role="alert" hidden></p></div>' +
+      '<div class="field"><label for="pin">PIN</label><div class="pin4" id="pin-cajas"><input id="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" aria-describedby="pin-err">' +
+        '<span class="dig on"></span><span class="dig"></span><span class="dig"></span><span class="dig"></span></div><p id="pin-err" class="msg err" role="alert" hidden></p></div>' +
       (a.nombre ? '<p class="meta">Vas a entrar como <b>' + esc(a.nombre) + '</b>.</p>' : '') +
       '<button type="submit" class="btn primary big">Entrar</button>' +
       '<button type="button" class="btn ghost" data-act="otro-curso">' + (a.nombre ? 'No soy ' + esc(a.nombre) : 'Cambiar de curso') + '</button></form>';
@@ -313,12 +321,24 @@ function vDocente() {
     '<div class="field"><label for="clave">Contraseña</label><input type="password" id="clave" autocomplete="current-password" autocapitalize="off" spellcheck="false"></div>' +
     '<button type="submit" class="btn primary big">Entrar</button><button type="button" class="btn ghost" data-act="rol" data-v="alumno">Soy alumno</button></form>';
   if (!d.p) return '<p class="empty">Cargando…</p>';
-  var tabs = [['clases', 'Clases'], ['bancos', 'Preguntas'], ['resultados', 'Resultados'], ['asistencia', 'Asistencia'], ['tabla', 'Tabla'], ['cursos', 'Cursos']];
-  var h = '<nav class="tabs" aria-label="Secciones del docente">' + tabs.map(function (t) {
-      return '<button class="tab" data-act="tab" data-v="' + t[0] + '" aria-current="' + (d.tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</nav>';
-  h += d.tab === 'clases' ? vClases() : d.tab === 'bancos' ? vBancos() : d.tab === 'resultados' ? vResultados() : d.tab === 'asistencia' ? vAsistencia()
-    : d.tab === 'tabla' ? vTablaDoc() : vCursos();
-  return h + '<button class="btn ghost" data-act="salir" style="align-self:center">Cerrar sesión de docente</button>';
+  /* Barra fija abajo, al alcance del pulgar: lo que se usa en cada clase. Lo demás está en "Más". */
+  var svg = function (p) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + p + '</svg>'; };
+  var tabs = [['clases', 'Clases', svg('<path d="M9 4h6v3H9z"/><path d="M7 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1"/><path d="M9 12h6M9 16h4"/>')],
+    ['resultados', 'Resultados', svg('<path d="M5 20V10M12 20V4M19 20v-7"/>')],
+    ['asistencia', 'Asistencia', svg('<path d="m4 7 2 2 3-4M4 16l2 2 3-4M13 8h7M13 17h7"/>')],
+    ['mas', 'Más', svg('<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>')]];
+  var SUB = { bancos: 'Preguntas', tabla: 'Tabla de posiciones', cursos: 'Cursos y alumnos' }, activa = SUB[d.tab] || d.tab === 'mas' ? 'mas' : d.tab;
+  var h = d.tab === 'mas' ? vMas() : (SUB[d.tab] ? '<button class="btn ghost atras" data-act="tab" data-v="mas">‹ Más</button>' : '') +
+    (d.tab === 'clases' ? vClases() : d.tab === 'bancos' ? vBancos() : d.tab === 'resultados' ? vResultados() : d.tab === 'asistencia' ? vAsistencia()
+      : d.tab === 'tabla' ? vTablaDoc() : vCursos());
+  return h + '<nav class="bnav" aria-label="Secciones del docente"><div class="bnav-in">' + tabs.map(function (t) {
+    return '<button class="tab" data-act="tab" data-v="' + t[0] + '" aria-current="' + (activa === t[0]) + '">' + t[2] + t[1] + '</button>'; }).join('') + '</div></nav>';
+}
+function vMas() {
+  var it = function (v, t, s) { return '<button class="list-btn" data-act="tab" data-v="' + v + '">' + t + '<span>' + s + '</span></button>'; };
+  return '<div class="stack"><h2>Más</h2>' + it('bancos', 'Preguntas', 'Temas y preguntas cargadas') + it('tabla', 'Tabla de posiciones', 'Cómo van los cursos') +
+    it('cursos', 'Cursos y alumnos', 'PIN y alumnos') +
+    '<button class="btn ghost pie" data-act="salir">Cerrar sesión de docente</button></div>';
 }
 
 /* ----- clases ----- */
@@ -528,10 +548,13 @@ function vCursos() {
     if (ab) {
       h += '<div class="alumnos">' + c.alumnos.map(function (a) {
         if (d.eda === a.id) return '<form class="row" id="f-alumno" novalidate><input type="text" id="a-nombre" value="' + esc(a.nombre) + '" autocomplete="off" aria-label="Nombre del alumno"><button type="submit" class="btn primary">Guardar</button><button type="button" class="btn" data-act="alumno-editar" data-id="">Cancelar</button></form>';
-        return '<div class="row al"><span>' + esc(a.nombre) + (a.vinculado ? ' <span class="pill plain">teléfono vinculado</span>' : '') + '</span><span class="row">' +
-          (a.vinculado ? '<button class="btn ghost" data-act="alumno-liberar" data-id="' + a.id + '">Desvincular teléfono</button>' : '') +
-          '<button class="btn ghost" data-act="alumno-editar" data-id="' + a.id + '">Corregir</button>' + confirmar('al:' + a.id, 'Dar de baja', 'alumno-baja', 'data-id="' + a.id + '"') + '</span></div>';
-      }).join('') + '</div><p class="hint">Cada alumno queda vinculado al primer teléfono desde el que elige su nombre: nadie más puede entrar como él. Si cambia de teléfono o se le rompe, tocá <b>Desvincular teléfono</b> y el próximo que elija ese nombre se lo queda. Dar de baja saca al alumno de las listas pero conserva sus notas.</p>' +
+        var abre = d.alm === a.id;
+        return '<div class="al"><div class="row al-fila"><span>' + esc(a.nombre) + (a.vinculado ? ' <span class="pill plain">teléfono vinculado</span>' : '') + '</span>' +
+          '<button class="btn ghost mas" data-act="al-menu" data-id="' + a.id + '" aria-expanded="' + abre + '" aria-label="Opciones de ' + esc(a.nombre) + '">⋯</button></div>' +
+          (abre ? '<div class="row al-opc"><button class="btn" data-act="alumno-editar" data-id="' + a.id + '">Corregir nombre</button>' +
+            (a.vinculado ? '<button class="btn" data-act="alumno-liberar" data-id="' + a.id + '">Desvincular teléfono</button>' : '') +
+            confirmar('al:' + a.id, 'Dar de baja', 'alumno-baja', 'data-id="' + a.id + '"') + '</div>' : '') + '</div>';
+      }).join('') + '</div><p class="hint">Cada alumno queda vinculado al primer teléfono desde el que elige su nombre: nadie más puede entrar como él. Si cambia de teléfono o se le rompe, tocá <b>⋯</b> y elegí <b>Desvincular teléfono</b>: el próximo que elija ese nombre se lo queda. Dar de baja saca al alumno de las listas pero conserva sus notas.</p>' +
         '<form class="stack" id="f-mas-al" novalidate><div class="field"><label for="m-alumnos">Agregar alumnos</label><textarea id="m-alumnos" rows="3" placeholder="Un nombre por renglón"></textarea></div><div class="row"><button type="submit" class="btn primary">Agregar</button>' +
         '</div></form>';
     }
@@ -558,6 +581,7 @@ setInterval(sondear, 5000);
 
 /* ================= marco y eventos ================= */
 function render() {
+  document.body.classList.toggle('con-bnav', S.rol === 'docente' && !!S.doc.tk && !!S.doc.p);   // deja lugar para la barra de abajo
   if (S.rol === 'alumno' && S.al.v === 'run' && S.al.run) { app.innerHTML = vRun(); return; }
   /* El alumno no ve el acceso del docente arriba: el docente entra con el enlace terminado en #docente
      o con "Acceso docente", al pie de la lista de cursos. */
@@ -626,9 +650,10 @@ var A = {
   'curso-tabla': function (d) { var c = cursoDe(d.id); return hacer('curso.guardar', { id: c.id, nombre: c.nombre, oculta: !c.oculta }, c.oculta ? 'Los alumnos vuelven a ver la tabla.' : 'Tabla oculta para este curso.'); },
   'curso-borrar': function (d) { return hacer('curso.borrar', { id: d.id, conHistorial: true }, 'Curso eliminado.'); },
   'pin-nuevo': function (d) { return hacer('pin.nuevo', { cursoId: d.id }, 'PIN nuevo. El anterior ya no sirve.'); },
-  'alumno-editar': function (d) { S.doc.eda = d.id || null; render(); var i = $('a-nombre'); if (i) i.focus(); },
-  'alumno-liberar': function (d) { return hacer('alumno.liberar', { id: d.id }, 'Nombre liberado. El próximo teléfono que lo elija se lo queda: que entre ahora.'); },
-  'alumno-baja': function (d) { return hacer('alumno.guardar', { id: d.id, baja: true }, 'Alumno dado de baja.'); }
+  'al-menu': function (d) { S.doc.alm = S.doc.alm === d.id ? null : d.id; S.confirm = null; render(); },
+  'alumno-editar': function (d) { S.doc.alm = null; S.doc.eda = d.id || null; render(); var i = $('a-nombre'); if (i) i.focus(); },
+  'alumno-liberar': function (d) { S.doc.alm = null; return hacer('alumno.liberar', { id: d.id }, 'Nombre liberado. El próximo teléfono que lo elija se lo queda: que entre ahora.'); },
+  'alumno-baja': function (d) { S.doc.alm = null; return hacer('alumno.guardar', { id: d.id, baja: true }, 'Alumno dado de baja.'); }
 };
 
 var F = {   // formularios
@@ -660,7 +685,7 @@ document.addEventListener('click', function (ev) {
   correr(A[b.dataset.act], b.dataset);
 });
 document.addEventListener('submit', function (ev) { ev.preventDefault(); if (F[ev.target.id]) correr(F[ev.target.id]); });
-document.addEventListener('input', function (ev) { var t = ev.target; if (t.dataset && t.dataset.previa) $(t.dataset.previa).innerHTML = previa(t.value, !!t.dataset.una); });
+document.addEventListener('input', function (ev) { var t = ev.target; if (t.id === 'pin') pintarPin(); if (t.dataset && t.dataset.previa) $(t.dataset.previa).innerHTML = previa(t.value, !!t.dataset.una); });
 document.addEventListener('change', function (ev) {
   var t = ev.target, d = S.doc;
   if (t.id === 's-per') { d.per = t.value; correr(function () { return recargar().then(cargarTab); }); }

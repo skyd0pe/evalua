@@ -26,7 +26,7 @@ const path = require('path');
   ver(await doc.isVisible('text=Control en vivo'), 'la clase de hoy muestra el control en vivo');
   ver(await doc.evaluate(() => { const a = document.querySelector('.ahora'), n = [...document.querySelectorAll('button')].find(b => b.textContent === 'Nueva clase'); return !!a && !!n && a.getBoundingClientRect().top < n.getBoundingClientRect().top && document.querySelector('.ahora [data-v="cerrado"]').getBoundingClientRect().bottom < innerHeight; }), 'el cuestionario abierto está arriba y Cerrar se ve sin bajar');
   await foto(doc, '01-clases'); await ancho(doc, 'clases');
-  await doc.click('.tab >> text=Cursos'); await esperar(doc);
+  await doc.click('.tab >> text=Más'); await doc.click('.list-btn >> text=Cursos y alumnos'); await esperar(doc);
   const pin = await doc.textContent('.pinbox b'); ver(/^\d{4}$/.test(pin), 'PIN de 4 números visible para el docente: ' + pin);
   await foto(doc, '02-cursos'); await ancho(doc, 'cursos');
 
@@ -104,7 +104,7 @@ const path = require('path');
   console.log(tsv.split('\n').slice(0, 3).join('\n'));
 
   // ---- docente: preguntas, clases, cursos
-  await doc.click('.tab >> text=Preguntas'); await esperar(doc); await foto(doc, '14-preguntas');
+  await doc.click('.tab >> text=Más'); await doc.click('.list-btn >> text=Preguntas'); await esperar(doc); await foto(doc, '14-preguntas');
   await doc.click('article:has-text("Pentecostés") >> text=Ver y corregir'); await esperar(doc);
   await doc.click('text=Anular >> nth=0'); await esperar(doc);
   ver(await doc.isVisible('.pill.crit >> text=Anulada'), 'anular una pregunta');
@@ -124,7 +124,7 @@ const path = require('path');
   await doc.click('text=Crear clase'); await esperar(doc);
   ver(await doc.locator('article:has-text("Prueba")').count() === 2, 'un mismo tema crea una clase por curso');
   await doc.click('article:has-text("Prueba") >> nth=0 >> text=Abrir ahora'); await esperar(doc);
-  await doc.click('.tab >> text=Cursos'); await esperar(doc);
+  await doc.click('.tab >> text=Más'); await doc.click('.list-btn >> text=Cursos y alumnos'); await esperar(doc);
   await doc.click('article:has-text("1° A") >> text=Ver y editar alumnos'); await esperar(doc);
   await doc.fill('#m-alumnos', 'Agustina Benítez'); await doc.click('#f-mas-al button[type=submit]'); await esperar(doc);
   ver(await doc.isVisible('.toast.show.err'), 'no deja cargar un nombre repetido');
@@ -133,7 +133,7 @@ const path = require('path');
   await foto(doc, '18-alumnos', true);
   await doc.click('article:has-text("1° A") >> text=Generar otro'); await esperar(doc);
   const pin2 = await doc.textContent('.pinbox b'); ver(pin2 !== pin || true, 'PIN nuevo: ' + pin2);
-  await doc.click('.tab >> text=Tabla'); await esperar(doc); await doc.click('text=Todos los cursos'); await esperar(doc); await foto(doc, '19-tabla', true);
+  await doc.click('.tab >> text=Más'); await doc.click('.list-btn >> text=Tabla de posiciones'); await esperar(doc); await doc.click('text=Todos los cursos'); await esperar(doc); await foto(doc, '19-tabla', true);
   // ---- el alumno vuelve con el PIN viejo
   await al.evaluate(() => { S.al.tk = 'vencida'; }); await al.click('text=← Volver'); await esperar(al);
   ver(await al.isVisible('text=Vas a entrar como'), 'sesión vencida: pide el PIN y recuerda quién es');
