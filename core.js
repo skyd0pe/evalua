@@ -566,7 +566,9 @@ var ACCIONES = {
     if (!q) throw E('Esa pregunta no existe.');
     if (p.errors.length) throw E(p.errors.join('\n'));
     if (p.questions.length !== 1) throw E('Acá va una sola pregunta.');
-    var n = p.questions[0], respondida = ctx.db.all('Intentos').some(function (it) { return it.resp.indexOf('"' + q.id + '"') >= 0; });
+    var cls = {};   // solo los intentos de clases que usan este banco, y se mira la clave exacta de la respuesta
+    ctx.db.all('Clases').forEach(function (c) { if (c.bancoId === q.bancoId) cls[c.id] = 1; });
+    var n = p.questions[0], respondida = intentos(ctx).some(function (it) { return cls[it.claseId] && Object.prototype.hasOwnProperty.call(respDe(it), q.id); });
     if (respondida && n.options.length !== J(q.opciones, []).length)
       throw E('Esta pregunta ya fue respondida: podés corregir el texto o cuál es la correcta, pero no agregar ni quitar opciones. Si está mal, anulala y cargá una nueva.');
     ctx.db.update('Preguntas', q.id, { texto: n.text, opciones: JSON.stringify(n.options), correcta: n.correct });
