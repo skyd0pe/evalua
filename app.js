@@ -28,9 +28,9 @@ function perLabel(p) { var x = p.split('-'); return (x[1] === '1' ? 'Primer' : '
 function opciones(lista, elegido, f) {   // un solo lugar arma todas las listas desplegables
   return lista.map(function (x) { var o = f(x); return '<option value="' + esc(o[0]) + '"' + (o[0] === elegido ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
 }
-function confirmar(clave, texto, act, extra) {
+function confirmar(clave, texto, act, extra, cls) {
   var on = S.confirm === clave;
-  return '<button type="button" class="btn danger" data-act="' + (on ? act : 'preguntar') + '" data-clave="' + esc(clave) + '" ' + (extra || '') + '>' + (on ? '¿Seguro? Tocá de nuevo' : texto) + '</button>';
+  return '<button type="button" class="btn danger' + (cls ? ' ' + cls : '') + '" data-act="' + (on ? act : 'preguntar') + '" data-clave="' + esc(clave) + '" ' + (extra || '') + '>' + (on ? '¿Seguro? Tocá de nuevo' : texto) + '</button>';
 }
 function aviso(msg, tipo) {
   var t = $('toast');
@@ -112,7 +112,7 @@ function vAlumno() {
   if (a.v === 'pin') {
     return '<form class="card" id="f-pin" novalidate><h2>PIN de ' + esc(a.cursoNombre) + '</h2>' +
       '<p class="meta">Son 4 números. Tu profe los dice en clase y cambian cada 4 horas.</p>' +
-      '<div class="field"><label for="pin">PIN</label><input id="pin" class="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"></div>' +
+      '<div class="field"><label for="pin">PIN</label><input id="pin" class="pin" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-describedby="pin-err"><p id="pin-err" class="msg err" role="alert" hidden></p></div>' +
       (a.nombre ? '<p class="meta">Vas a entrar como <b>' + esc(a.nombre) + '</b>.</p>' : '') +
       '<button type="submit" class="btn primary big">Entrar</button>' +
       '<button type="button" class="btn ghost" data-act="otro-curso">' + (a.nombre ? 'No soy ' + esc(a.nombre) : 'Cambiar de curso') + '</button></form>';
@@ -341,12 +341,12 @@ function tarjetaClase(c) {
   var d = S.doc, cu = cursoDe(c.cursoId) || { nombre: 'Curso eliminado', alumnos: [] }, ab = c.estado === 'abierto';
   var est = !c.bancoId ? ['Sin cuestionario', 'plain'] : c.estado === 'nuevo' ? ['Sin abrir', 'plain'] : !ab ? ['Cerrado', 'plain'] : c.modo === 'ausentes' ? ['Abierto para ausentes', 'warn'] : ['Abierto', 'good'];
   var acciones = '<div class="row">' +
-    (ab ? '<button class="btn primary big" data-act="clase-estado" data-id="' + c.id + '" data-v="cerrado">Cerrar cuestionario</button>'
+    (ab ? confirmar('cerrar:' + c.id, 'Cerrar cuestionario', 'clase-estado', 'data-id="' + c.id + '" data-v="cerrado"', 'solid big')
       : c.bancoId && c.estado === 'nuevo' ? '<button class="btn primary" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto">Abrir ahora</button>'
       : c.bancoId ? '<button class="btn" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto">Reabrir en clase</button><button class="btn" data-act="clase-estado" data-id="' + c.id + '" data-v="abierto" data-aus="1">Reabrir para ausentes</button>'
       : '<button class="btn primary" data-act="ir-asis" data-id="' + c.cursoId + '">Tomar asistencia</button>') + '</div>';
   var mas = '<div class="row">' + (c.bancoId && c.estado !== 'nuevo' ? '<button class="btn" data-act="ir-res" data-id="' + c.id + '">Resultados</button>' : '') +
-    '<button class="btn" data-act="clase-editar" data-id="' + c.id + '">Editar</button>' + confirmar('clase:' + c.id, 'Eliminar', 'clase-borrar', 'data-id="' + c.id + '"') + '</div>';
+    '<button class="btn" data-act="clase-editar" data-id="' + c.id + '">Editar</button>' + (ab ? '' : confirmar('clase:' + c.id, 'Eliminar', 'clase-borrar', 'data-id="' + c.id + '"')) + '</div>' + (ab ? '<p class="hint">Para eliminar esta clase, primero cerrá el cuestionario.</p>' : '');
   return '<article class="card' + (ab ? ' open' : '') + '"><div class="card-head"><h2>' + esc(c.titulo) + '</h2><span class="pill ' + est[1] + '">' + est[0] + '</span></div>' +
     '<p class="meta"><b>' + fmtDate(c.fecha) + '</b> · ' + esc(cu.nombre) + ' · ' + (c.bancoId ? c.porAlumno + ' preguntas por alumno · ' + c.segundos + ' s cada una · ' + c.hechos + ' de ' + cu.alumnos.length + ' terminaron' : 'solo asistencia') + '</p>' +
     (ab ? acciones + '<div class="live" id="vivo-' + c.id + '" aria-live="polite">' + vVivo(d.vivo[c.id]) + '</div>' + mas : acciones + mas) + '</article>';
@@ -439,7 +439,7 @@ function vResultados() {
   var hechos = r.filas.filter(function (f) { return f.e === 'listo'; }), del = r.filas.length;
   var prom = hechos.length ? Math.round(hechos.reduce(function (s, f) { return s + f.puntos; }, 0) / hechos.length) : null;
   h += '<div class="tiles"><div class="tile"><b>' + hechos.length + '/' + del + '</b><span>terminaron</span></div>' +
-    '<div class="tile"><b>' + (prom === null ? '–' : prom) + '</b><span>puntos promedio (de 100)</span></div>' +
+    '<div class="tile"><b>' + (prom === null ? '–' : prom) + '</b><span>promedio sobre 100</span></div>' +
     '<div class="tile"><b>' + r.filas.reduce(function (s, f) { return s + (f.salidas || 0); }, 0) + '</b><span>salidas de pantalla</span></div></div>';
   var vistas = r.preguntas.filter(function (q) { return q.vistas; }).sort(function (a, b) { return a.ok / a.vistas - b.ok / b.vistas; });
   if (vistas.length) {
@@ -528,10 +528,10 @@ function vCursos() {
     if (ab) {
       h += '<div class="alumnos">' + c.alumnos.map(function (a) {
         if (d.eda === a.id) return '<form class="row" id="f-alumno" novalidate><input type="text" id="a-nombre" value="' + esc(a.nombre) + '" autocomplete="off" aria-label="Nombre del alumno"><button type="submit" class="btn primary">Guardar</button><button type="button" class="btn" data-act="alumno-editar" data-id="">Cancelar</button></form>';
-        return '<div class="row al"><span>' + esc(a.nombre) + (a.vinculado ? ' <span class="pill plain">con teléfono</span>' : '') + '</span><span class="row">' +
-          (a.vinculado ? '<button class="btn ghost" data-act="alumno-liberar" data-id="' + a.id + '">Liberar</button>' : '') +
+        return '<div class="row al"><span>' + esc(a.nombre) + (a.vinculado ? ' <span class="pill plain">teléfono vinculado</span>' : '') + '</span><span class="row">' +
+          (a.vinculado ? '<button class="btn ghost" data-act="alumno-liberar" data-id="' + a.id + '">Desvincular teléfono</button>' : '') +
           '<button class="btn ghost" data-act="alumno-editar" data-id="' + a.id + '">Corregir</button>' + confirmar('al:' + a.id, 'Dar de baja', 'alumno-baja', 'data-id="' + a.id + '"') + '</span></div>';
-      }).join('') + '</div><p class="hint">Cada alumno queda vinculado al primer teléfono desde el que elige su nombre: nadie más puede entrar como él. Si cambia de teléfono o se le rompe, tocá <b>Liberar</b> y el próximo que elija ese nombre se lo queda. Dar de baja saca al alumno de las listas pero conserva sus notas.</p>' +
+      }).join('') + '</div><p class="hint">Cada alumno queda vinculado al primer teléfono desde el que elige su nombre: nadie más puede entrar como él. Si cambia de teléfono o se le rompe, tocá <b>Desvincular teléfono</b> y el próximo que elija ese nombre se lo queda. Dar de baja saca al alumno de las listas pero conserva sus notas.</p>' +
         '<form class="stack" id="f-mas-al" novalidate><div class="field"><label for="m-alumnos">Agregar alumnos</label><textarea id="m-alumnos" rows="3" placeholder="Un nombre por renglón"></textarea></div><div class="row"><button type="submit" class="btn primary">Agregar</button>' +
         '</div></form>';
     }
@@ -632,7 +632,10 @@ var A = {
 };
 
 var F = {   // formularios
-  'f-pin': function () { var pin = val('pin').trim(); if (!/^\d{4}$/.test(pin)) { aviso('El PIN son 4 números.', 'err'); return; } return entrar(pin); },
+  'f-pin': function () { var pin = val('pin').trim(); if (!/^\d{4}$/.test(pin)) { aviso('El PIN son 4 números.', 'err'); return; } return entrar(pin).catch(function (e) {
+    if (e.code !== 'pin') throw e;   // PIN equivocado o vencido: el aviso va debajo del campo, donde está mirando
+    var m = $('pin-err'); m.textContent = e.message; m.hidden = false; $('pin').setAttribute('aria-invalid', 'true'); $('pin').select();
+  }); },
   'f-login': function () { return todo([{ a: 'login', clave: val('clave') }, pPanel()]).then(function (r) { S.doc.tk = r[0].tk; guardado('ev-doc', r[0].tk, sessionStorage); ponerPanel(r[1]); }); },
   'f-clase': function () {
     var f = S.doc.fc, cursos = [];

@@ -82,7 +82,7 @@ const path = require('path');
 
   // ---- docente: cerrar, resultados, asistencia
   await doc.click('.tab >> text=Clases'); await esperar(doc);
-  await doc.click('article:has-text("1° A"):has-text("Pentecostés") >> text=Cerrar cuestionario'); await esperar(doc);
+  await doc.click('article:has-text("1° A"):has-text("Pentecostés") >> text=Cerrar cuestionario'); await doc.click('article:has-text("1° A"):has-text("Pentecostés") >> text=¿Seguro?'); await esperar(doc);
   await al.click('text=Todos los cursos'); await al.click('text=← Volver'); await esperar(al);
   await al.click('article:has-text("Pentecostés") >> text=Ver la corrección'); await esperar(al);
   ver(await al.isVisible('text=La correcta era') || await al.isVisible('text=Correcta:'), 'cerrado el cuestionario, ve la corrección');
@@ -138,7 +138,7 @@ const path = require('path');
   await al.evaluate(() => { S.al.tk = 'vencida'; }); await al.click('text=← Volver'); await esperar(al);
   ver(await al.isVisible('text=Vas a entrar como'), 'sesión vencida: pide el PIN y recuerda quién es');
   await al.fill('#pin', pin); await al.click('#f-pin button[type=submit]'); await esperar(al);
-  ver(pin2 === pin || await al.isVisible('.toast.show.err'), 'el PIN anterior ya no sirve');
+  ver(pin2 === pin || await al.isVisible('#pin-err'), 'el PIN anterior ya no sirve');
   await al.fill('#pin', pin2); await al.click('#f-pin button[type=submit]'); await esperar(al);
   ver(await al.isVisible('text=Hola, Camila'), 'con el PIN nuevo entra directo, sin volver a elegir nombre');
   await al.emulateMedia({ colorScheme: 'dark' }); await foto(al, '20-oscuro');
