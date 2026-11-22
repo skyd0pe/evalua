@@ -493,3 +493,8 @@ test('device y acción: nombres heredados de Object no rompen el servidor ni el 
   // un nombre de alumno como "constructor" no cuenta como repetido
   w.doc('curso.guardar', { id: w.curso.id, nombre: '1° A', alumnos: 'constructor' });
 });
+
+test('el panel ofrece siempre los dos cuatrimestres del año, aunque todavía no tengan clases', () => {
+  const w = mundo();   // hoy es marzo de 2027 y la única clase es del primer cuatrimestre
+  assert.deepStrictEqual(w.doc('panel').periodos, ['2027-2', '2027-1']);
+});

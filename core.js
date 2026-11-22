@@ -442,6 +442,7 @@ var ACCIONES = {
     sesion(ctx, r, 'docente');
     var corte = corteDe(ctx), per = r.periodo || periodoHoy(ctx), pers = {}, hechos = {}, usos = {}, cuenta = {}, nCl = {};
     pers[periodoHoy(ctx)] = 1;
+    pers[ctx.hoy().slice(0, 4) + '-1'] = 1; pers[ctx.hoy().slice(0, 4) + '-2'] = 1;   // los dos cuatrimestres del año siempre se pueden elegir, aunque todavía no tengan clases
     ctx.db.all('Clases').forEach(function (c) { pers[periodoDe(c.fecha, corte)] = 1; if (c.bancoId) usos[c.bancoId] = (usos[c.bancoId] || 0) + 1; nCl[c.cursoId] = (nCl[c.cursoId] || 0) + 1; });
     intentos(ctx).forEach(function (it) { if (it.fin) hechos[it.claseId] = (hechos[it.claseId] || 0) + 1; });
     ctx.db.all('Preguntas').forEach(function (q) { var c = cuenta[q.bancoId] || (cuenta[q.bancoId] = { n: 0, an: 0 }); if (si(q.anulada)) c.an++; else c.n++; });
