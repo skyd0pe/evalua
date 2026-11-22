@@ -1,5 +1,5 @@
 /* Evaluá: reglas del servidor.
-   Este mismo archivo corre en Google Apps Script (producción), en Node (tests) y en el navegador (modo demostración).
+   Este mismo archivo corre en Supabase (producción, dentro de la función `api`), en Node (tests) y en el navegador (modo demostración).
    No contiene datos ni secretos: los datos viven en la planilla. */
 
 var TABLAS = {
@@ -14,7 +14,7 @@ var TABLAS = {
   Pines: ['id', 'pin', 'vence']
 };
 var H4 = 4 * 3600 * 1000;   // duración de un PIN
-var GRACIA = 8000;          // margen por la demora de la red: en Google cada pedido tarda 3 a 5 segundos
+var GRACIA = 8000;          // margen por la demora de la red: en producción cada pedido tarda de 0,3 a 2 segundos según la señal
 var LECTURA = 5000;         // la pregunta se muestra sola, en grande, antes de las opciones
 var REINTENTO = 5000;       // un pedido repetido antes de este tiempo es un reintento, no una reconexión
 

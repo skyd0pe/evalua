@@ -7,46 +7,37 @@ Cuestionarios cortos para evaluar en cada clase: el docente abre un cuestionario
 | Archivo | Qué es | Dónde corre |
 |---|---|---|
 | `index.html`, `app.js` | La pantalla. No guarda datos ni corrige. | GitHub Pages |
-| `core.js` | Las reglas: PIN, sesiones, corrección, tiempo, asistencia, puntos. | Google Apps Script (copiado como `Core.gs`), tests y demo |
-| `backend/Code.gs` | Lee y escribe la planilla de Google. Sin reglas. | Google Apps Script |
+| `core.js` | Las reglas: PIN, sesiones, corrección, tiempo, asistencia, puntos. | Supabase (dentro de la función `api`), tests y demo |
+| `supabase/functions/api/index.ts` | La función de Supabase: abre una transacción, carga las tablas, corre `core.js` y guarda lo que cambió. Sin reglas. | Supabase Edge Functions |
+| `supabase/schema.sql` | Las tablas (RLS activado y sin políticas: solo la función accede). | Postgres de Supabase |
+| `supabase/desplegar.sh` | Publica la función. | Tu PC o GitHub Actions |
 | `demo.js` | Servidor simulado con datos de ejemplo. Solo se carga si `API_URL` está vacía. | Navegador |
-| `test/` | Tests de las reglas, del adaptador de Google, recorrido en navegador y prueba de carga. | Node |
+| `test/` | Tests de las reglas, recorrido en navegador y prueba de carga. | Node |
 
-Los datos (alumnos, preguntas con su respuesta correcta, respuestas, contraseña) viven solo en la planilla de Google. En este repositorio no hay ningún dato.
+Los datos (alumnos, preguntas con su respuesta correcta, respuestas, contraseña) viven solo en Supabase. En este repositorio no hay ningún dato.
+
+**Cómo funciona un pedido.** Las reglas de `core.js` son síncronas y trabajan sobre tablas en memoria. Cada pedido a la función: toma un turno global (`pg_advisory_xact_lock`), trae todas las tablas en una sola consulta, corre las reglas y guarda en un solo viaje solo las filas que cambiaron. Por eso dos pedidos nunca se pisan. La "memoria rápida" de antes (sesiones, intentos en curso, límites de intentos) es la tabla `kv`, con vencimiento. Mientras el volumen sea el de un aula, cada pedido tarda unas decenas de milisegundos dentro de la base.
 
 ## Puesta en marcha
 
-1. Crear una planilla de Google vacía. **Extensiones > Apps Script**.
-2. Pegar `backend/Code.gs` como `Code.gs` y `core.js` como un archivo nuevo `Core.gs`.
-3. Ejecutar la función `preparar` y aceptar el permiso. Crea las pestañas y una contraseña de docente en la pestaña **Config** (fila `clave`), que se puede cambiar ahí.
-4. **Implementar > Nueva implementación > Aplicación web**. Ejecutar como: *yo*. Quién tiene acceso: *cualquier persona*.
-5. Copiar la dirección que termina en `/exec` y pegarla en `API_URL`, al principio de `index.html`.
+1. Crear un proyecto en [supabase.com](https://supabase.com).
+2. Correr `supabase/schema.sql` en el **SQL Editor**.
+3. En la tabla `Config`, agregar la fila `id = clave` con la contraseña de docente en `valor`, y la fila `id = corte`, `valor = 07-15` (día en que empieza el segundo cuatrimestre).
+4. Crear un token en [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens) y publicar la función: `SUPABASE_ACCESS_TOKEN=... SUPABASE_PROJECT_REF=<ref del proyecto> supabase/desplegar.sh`.
+5. En `index.html`, poner en `API_URL` la dirección `https://<ref>.supabase.co/functions/v1/api?forceFunctionRegion=<región del proyecto>`.
 6. En GitHub: **Settings > Pages**, publicar la rama `main`.
-
-Los cambios de `index.html` y `app.js` se publican solos en GitHub Pages. Los de `core.js` y `backend/` los publica en Google la automatización (ver abajo). A mano: pegarlos en el editor y publicar en **Implementar > Administrar las implementaciones > editar > Nueva versión** (así la dirección no cambia).
 
 ## Publicación automática
 
-Cada vez que cambia `core.js` o `backend/` en `main`, GitHub corre los tests y, si pasan, sube el código al proyecto de Google y publica una versión nueva en la misma dirección (`.github/workflows/publicar-google.yml`). Usa [clasp](https://github.com/google/clasp), la herramienta oficial de Google.
-
-Para activarla, una sola vez:
-
-1. En [script.google.com/home/usersettings](https://script.google.com/home/usersettings), activar **API de Google Apps Script**.
-2. En la PC (con [Node.js](https://nodejs.org) instalado), abrir una terminal y correr `npx @google/clasp@2.4.2 login`. Se abre Google: elegir la cuenta dueña de la planilla y tocar **Permitir**. Queda creado el archivo `.clasprc.json` en la carpeta del usuario (en Windows, `%USERPROFILE%\.clasprc.json`).
-3. En GitHub: **Settings > Secrets and variables > Actions > New repository secret**. Nombre: `CLASPRC_JSON`. Valor: todo el contenido de ese archivo (abrirlo con `notepad %USERPROFILE%\.clasprc.json`; empieza con `{` y termina con `}`). No sirve la dirección `https://accounts.google.com/...` que muestra la terminal: esa es solo para autorizar. Después, borrar el archivo de la PC.
-4. Para probarla: pestaña **Actions > Publicar en Google > Run workflow**.
-
-El secreto da acceso a los proyectos de Apps Script y a parte del Drive de esa cuenta. GitHub lo guarda cifrado y no lo pasa a cambios propuestos por otras personas. Para cortarlo: [myaccount.google.com/connections](https://myaccount.google.com/connections), quitar el acceso de clasp, y borrar el secreto en GitHub.
-
-Sin el secreto, la automatización corre los tests y avisa que no publicó.
+Cada vez que cambia `core.js` o `supabase/` en `main`, GitHub corre los tests y, si pasan, publica la función (`.github/workflows/publicar-supabase.yml`). Para activarla: **Settings > Secrets and variables > Actions > New repository secret**, nombre `SUPABASE_ACCESS_TOKEN`, valor el token de la cuenta. Ese token da control sobre todos tus proyectos de Supabase: guardalo solo ahí, y para cortarlo revocalo en la página de tokens. Sin el secreto, la automatización corre los tests y avisa que no publicó.
 
 ## Pruebas
 
 ```
-node --test test/core.test.js test/adaptador.test.js   # reglas y adaptador (planilla simulada)
+node --test test/core.test.js                          # reglas
 node test/ui.js                                        # recorrido completo en Chrome, modo demostración (necesita Playwright)
 node test/carga.js local                               # 35 alumnos a la vez contra las reglas en memoria
-node test/carga.js https://script.google.com/macros/s/XXXX/exec CLAVE   # lo mismo contra Google, sobre un curso de prueba
+node test/carga.js https://<ref>.supabase.co/functions/v1/api CLAVE   # lo mismo contra Supabase, con una clase abierta de un curso de prueba
 ```
 
 ## Reglas principales
@@ -55,5 +46,5 @@ node test/carga.js https://script.google.com/macros/s/XXXX/exec CLAVE   # lo mis
 - **Cuestionario:** el servidor manda una pregunta por vez, sin la respuesta correcta, mide el tiempo y guarda cada respuesta al instante. Recargar no reinicia el intento y cuesta la pregunta que estaba en pantalla.
 - **Puntos:** cada cuestionario vale hasta 100, tenga 5 o 10 preguntas. La tabla es por cuatrimestre.
 - **Asistencia:** P presente, T tarde (cuenta), J justificado (no cuenta), A ausente. Rendir "para ausentes" suma puntos pero sigue ausente. Una clase preparada y sin abrir no es una falta.
-- **Velocidad:** cada llamada a Google tarda 1 a 2 segundos solo de ida y vuelta, así que la pantalla junta en una sola llamada lo que antes eran varias (`lote`). El servidor guarda una copia de las pestañas que cambian poco en la memoria rápida de Google; se renueva al escribir desde la app y al editar la planilla a mano (`onEdit`). Intentos se lee siempre de la planilla.
+- **Velocidad:** la pantalla junta en una sola llamada lo que serían varias (`lote`), y la función corre en la misma región que la base (`forceFunctionRegion`), así los viajes a la base son cortos.
 - **Nota sugerida:** promedio de los cuestionarios rendidos, de 1 a 10.

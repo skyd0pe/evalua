@@ -1,5 +1,5 @@
 // Prueba de carga: hace rendir a todos los alumnos de un curso al mismo tiempo y mide demoras y errores.
-//   node test/carga.js https://script.google.com/macros/s/XXXX/exec CLAVE_DE_DOCENTE
+//   node test/carga.js https://REF.supabase.co/functions/v1/api CLAVE_DE_DOCENTE
 //   node test/carga.js local            (contra las reglas en memoria, para probar este mismo script)
 // Usa la primera clase ABIERTA que encuentre. Deja intentos reales: correrla sobre un curso de prueba de 35 alumnos.
 const [, , URL_, CLAVE = 'x', PAUSA = '2500'] = process.argv;

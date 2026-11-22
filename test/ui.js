@@ -4,7 +4,7 @@ const path = require('path');
 (async () => {
   const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: 'es-AR', timezoneId: 'America/Argentina/Buenos_Aires' });
-  // Copia de index.html sin la dirección del servidor: la prueba corre en modo demostración y no toca Google.
+  // Copia de index.html sin la dirección del servidor: la prueba corre en modo demostración y no toca el servidor.
   const fs = require('fs'), demo = path.join(__dirname, 'demo.html');
   fs.writeFileSync(demo, fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8')
     .replace(/var API_URL = '[^']*';/, "var API_URL = '';").replace(/src="(core|app)\.js"/g, 'src="../$1.js"'));
